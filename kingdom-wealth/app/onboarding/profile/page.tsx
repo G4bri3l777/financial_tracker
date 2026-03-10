@@ -20,6 +20,7 @@ export default function OnboardingProfilePage() {
   const [ownsOrRents, setOwnsOrRents] = useState<HousingValue>("rent");
   const [hasDebt, setHasDebt] = useState<DebtValue>("no");
   const [fetchingProfile, setFetchingProfile] = useState(false);
+  const [guardChecked, setGuardChecked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -38,6 +39,7 @@ export default function OnboardingProfilePage() {
 
   useEffect(() => {
     if (!authLoading && !user) {
+      setGuardChecked(true);
       router.replace("/login");
     }
   }, [authLoading, user, router]);
@@ -53,6 +55,17 @@ export default function OnboardingProfilePage() {
 
       try {
         const userSnap = await getDoc(doc(db, "users", user.uid));
+        const onboardingStep = userSnap.data()?.onboardingStep as string | undefined;
+        const role = userSnap.data()?.role as string | undefined;
+
+        if (
+          onboardingStep === "complete" ||
+          (onboardingStep === "invite" && role === "member")
+        ) {
+          router.replace("/dashboard");
+          return;
+        }
+
         const data = userSnap.data();
 
         setFirstName(
@@ -83,6 +96,7 @@ export default function OnboardingProfilePage() {
         setError(message);
       } finally {
         setFetchingProfile(false);
+        setGuardChecked(true);
       }
     };
 
@@ -115,7 +129,14 @@ export default function OnboardingProfilePage() {
         },
         { merge: true },
       );
-      router.push("/onboarding/household");
+
+      const userSnap = await getDoc(doc(db, "users", user.uid));
+      const role = userSnap.data()?.role as string | undefined;
+      if (role === "admin") {
+        router.push("/onboarding/household");
+      } else {
+        router.push("/onboarding/household");
+      }
     } catch (submitError) {
       const message =
         submitError instanceof Error
@@ -127,7 +148,7 @@ export default function OnboardingProfilePage() {
     }
   };
 
-  if (authLoading) {
+  if (authLoading || !guardChecked) {
     return (
       <div className="min-h-screen bg-white px-4 py-8 text-[#1B2A4A] md:px-6 lg:px-8">
         <div className="mx-auto w-full max-w-lg">Loading...</div>

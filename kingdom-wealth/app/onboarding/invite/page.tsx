@@ -23,6 +23,7 @@ export default function OnboardingInvitePage() {
   const { user, loading: authLoading } = useAuth();
 
   const [loadingInvite, setLoadingInvite] = useState(true);
+  const [guardChecked, setGuardChecked] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -31,6 +32,7 @@ export default function OnboardingInvitePage() {
 
   useEffect(() => {
     if (!authLoading && !user) {
+      setGuardChecked(true);
       router.replace("/login");
     }
   }, [authLoading, user, router]);
@@ -47,7 +49,20 @@ export default function OnboardingInvitePage() {
       try {
         const userRef = doc(db, "users", user.uid);
         const userSnap = await getDoc(userRef);
-        const householdId = userSnap.data()?.householdId as string | undefined;
+        const userData = userSnap.data();
+        const role = userData?.role as string | undefined;
+        const onboardingStep = userData?.onboardingStep as string | undefined;
+
+        if (
+          onboardingStep === "complete" ||
+          role === "member" ||
+          (onboardingStep === "invite" && role === "member")
+        ) {
+          router.replace("/dashboard");
+          return;
+        }
+
+        const householdId = userData?.householdId as string | undefined;
 
         if (!householdId) {
           throw new Error("No household found yet. Please complete Step 2 first.");
@@ -76,6 +91,7 @@ export default function OnboardingInvitePage() {
         setError(message);
       } finally {
         setLoadingInvite(false);
+        setGuardChecked(true);
       }
     };
 
@@ -182,7 +198,7 @@ export default function OnboardingInvitePage() {
     }
   };
 
-  if (authLoading || loadingInvite) {
+  if (authLoading || loadingInvite || !guardChecked) {
     return (
       <div className="min-h-screen bg-white px-4 py-8 text-[#1B2A4A] md:px-6 lg:px-8">
         <div className="mx-auto w-full max-w-lg">Loading...</div>

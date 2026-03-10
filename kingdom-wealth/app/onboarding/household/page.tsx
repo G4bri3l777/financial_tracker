@@ -36,12 +36,15 @@ export default function OnboardingHouseholdPage() {
   const [householdName, setHouseholdName] = useState("");
   const [country, setCountry] = useState("United States");
   const [householdId, setHouseholdId] = useState<string | null>(null);
+  const [role, setRole] = useState<"admin" | "member" | null>(null);
   const [fetchingHousehold, setFetchingHousehold] = useState(false);
+  const [guardChecked, setGuardChecked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!authLoading && !user) {
+      setGuardChecked(true);
       router.replace("/login");
     }
   }, [authLoading, user, router]);
@@ -57,7 +60,20 @@ export default function OnboardingHouseholdPage() {
 
       try {
         const userSnap = await getDoc(doc(db, "users", user.uid));
-        const existingHouseholdId = userSnap.data()?.householdId as
+        const userData = userSnap.data();
+        const userRole = userData?.role as "admin" | "member" | undefined;
+        const onboardingStep = userData?.onboardingStep as string | undefined;
+        setRole(userRole ?? null);
+
+        if (
+          onboardingStep === "complete" ||
+          (onboardingStep === "invite" && userRole === "member")
+        ) {
+          router.replace("/dashboard");
+          return;
+        }
+
+        const existingHouseholdId = userData?.householdId as
           | string
           | null
           | undefined;
@@ -91,6 +107,7 @@ export default function OnboardingHouseholdPage() {
         setError(message);
       } finally {
         setFetchingHousehold(false);
+        setGuardChecked(true);
       }
     };
 
@@ -110,6 +127,24 @@ export default function OnboardingHouseholdPage() {
 
     try {
       setSaving(true);
+
+      if (role === "member") {
+        if (!householdId) {
+          throw new Error("No household found for your account.");
+        }
+
+        await updateDoc(doc(db, "households", householdId), {
+          name: householdName.trim(),
+          country,
+        });
+
+        await updateDoc(doc(db, "users", user.uid), {
+          onboardingStep: "complete",
+        });
+
+        router.push("/dashboard");
+        return;
+      }
 
       if (householdId) {
         await updateDoc(doc(db, "households", householdId), {
@@ -149,7 +184,7 @@ export default function OnboardingHouseholdPage() {
     }
   };
 
-  if (authLoading) {
+  if (authLoading || !guardChecked) {
     return (
       <div className="min-h-screen bg-white px-4 py-8 text-[#1B2A4A] md:px-6 lg:px-8">
         <div className="mx-auto w-full max-w-lg">Loading...</div>
@@ -176,9 +211,13 @@ export default function OnboardingHouseholdPage() {
           </section>
 
           <section className="space-y-2">
-            <h1 className="text-3xl font-bold md:text-4xl">Set up your household</h1>
+            <h1 className="text-3xl font-bold md:text-4xl">
+              {role === "member" ? "Your household" : "Set up your household"}
+            </h1>
             <p className="text-sm text-[#1B2A4A]/75 md:text-base">
-              This is your shared financial space
+              {role === "member"
+                ? `You're joining ${householdName || "your household"}`
+                : "This is your shared financial space"}
             </p>
           </section>
 

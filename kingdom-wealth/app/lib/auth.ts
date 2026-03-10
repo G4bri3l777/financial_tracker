@@ -8,11 +8,16 @@ import {
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
 
+type RegisterUserOptions = {
+  skipUserDocument?: boolean;
+};
+
 export async function registerUser(
   email: string,
   password: string,
   firstName: string,
   lastName: string,
+  options?: RegisterUserOptions,
 ) {
   const credential = await createUserWithEmailAndPassword(auth, email, password);
   const displayName = `${firstName} ${lastName}`.trim();
@@ -21,15 +26,17 @@ export async function registerUser(
     await updateProfile(credential.user, { displayName });
   }
 
-  await setDoc(doc(db, "users", credential.user.uid), {
-    uid: credential.user.uid,
-    email: credential.user.email,
-    displayName: displayName || null,
-    onboardingStep: "profile",
-    createdAt: serverTimestamp(),
-    householdId: null,
-    role: null,
-  });
+  if (!options?.skipUserDocument) {
+    await setDoc(doc(db, "users", credential.user.uid), {
+      uid: credential.user.uid,
+      email: credential.user.email,
+      displayName: displayName || null,
+      onboardingStep: "profile",
+      createdAt: serverTimestamp(),
+      householdId: null,
+      role: null,
+    });
+  }
 
   return credential.user;
 }
