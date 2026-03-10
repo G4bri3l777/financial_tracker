@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useAuth } from "../../hooks/useAuth";
 import { db } from "../../lib/firebase";
 
@@ -19,6 +19,7 @@ export default function OnboardingProfilePage() {
   const [monthlyIncome, setMonthlyIncome] = useState("");
   const [ownsOrRents, setOwnsOrRents] = useState<HousingValue>("rent");
   const [hasDebt, setHasDebt] = useState<DebtValue>("no");
+  const [fetchingProfile, setFetchingProfile] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -42,14 +43,53 @@ export default function OnboardingProfilePage() {
   }, [authLoading, user, router]);
 
   useEffect(() => {
-    if (!firstName && parsedDisplayName.first) {
-      setFirstName(parsedDisplayName.first);
-    }
+    const loadExistingProfile = async () => {
+      if (!user) {
+        return;
+      }
 
-    if (!lastName && parsedDisplayName.last) {
-      setLastName(parsedDisplayName.last);
+      setFetchingProfile(true);
+      setError("");
+
+      try {
+        const userSnap = await getDoc(doc(db, "users", user.uid));
+        const data = userSnap.data();
+
+        setFirstName(
+          typeof data?.firstName === "string" && data.firstName.trim()
+            ? data.firstName
+            : parsedDisplayName.first,
+        );
+        setLastName(
+          typeof data?.lastName === "string" && data.lastName.trim()
+            ? data.lastName
+            : parsedDisplayName.last,
+        );
+        setDateOfBirth(
+          typeof data?.dateOfBirth === "string" ? data.dateOfBirth : "",
+        );
+        setMonthlyIncome(
+          data?.monthlyIncome !== undefined && data?.monthlyIncome !== null
+            ? String(data.monthlyIncome)
+            : "",
+        );
+        setOwnsOrRents(data?.ownsOrRents === "own" ? "own" : "rent");
+        setHasDebt(data?.hasDebt === "yes" ? "yes" : "no");
+      } catch (loadError) {
+        const message =
+          loadError instanceof Error
+            ? loadError.message
+            : "Could not load your profile data.";
+        setError(message);
+      } finally {
+        setFetchingProfile(false);
+      }
+    };
+
+    if (!authLoading && user) {
+      void loadExistingProfile();
     }
-  }, [parsedDisplayName, firstName, lastName]);
+  }, [authLoading, user, parsedDisplayName.first, parsedDisplayName.last]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -128,6 +168,7 @@ export default function OnboardingProfilePage() {
                 name="firstName"
                 value={firstName}
                 onChange={(event) => setFirstName(event.target.value)}
+                disabled={fetchingProfile || saving}
                 required
                 className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] px-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
               />
@@ -140,6 +181,7 @@ export default function OnboardingProfilePage() {
                 name="lastName"
                 value={lastName}
                 onChange={(event) => setLastName(event.target.value)}
+                disabled={fetchingProfile || saving}
                 required
                 className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] px-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
               />
@@ -152,6 +194,7 @@ export default function OnboardingProfilePage() {
                 name="dateOfBirth"
                 value={dateOfBirth}
                 onChange={(event) => setDateOfBirth(event.target.value)}
+                disabled={fetchingProfile || saving}
                 required
                 className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] px-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
               />
@@ -171,6 +214,7 @@ export default function OnboardingProfilePage() {
                   step="1"
                   value={monthlyIncome}
                   onChange={(event) => setMonthlyIncome(event.target.value)}
+                  disabled={fetchingProfile || saving}
                   required
                   className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] pl-8 pr-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
                 />
@@ -183,6 +227,7 @@ export default function OnboardingProfilePage() {
                 <button
                   type="button"
                   onClick={() => setOwnsOrRents("own")}
+                  disabled={fetchingProfile || saving}
                   className={`h-11 flex-1 rounded-full border px-4 text-sm font-semibold transition ${
                     ownsOrRents === "own"
                       ? "border-[#C9A84C] bg-[#C9A84C] text-[#1B2A4A]"
@@ -194,6 +239,7 @@ export default function OnboardingProfilePage() {
                 <button
                   type="button"
                   onClick={() => setOwnsOrRents("rent")}
+                  disabled={fetchingProfile || saving}
                   className={`h-11 flex-1 rounded-full border px-4 text-sm font-semibold transition ${
                     ownsOrRents === "rent"
                       ? "border-[#C9A84C] bg-[#C9A84C] text-[#1B2A4A]"
@@ -211,6 +257,7 @@ export default function OnboardingProfilePage() {
                 <button
                   type="button"
                   onClick={() => setHasDebt("yes")}
+                  disabled={fetchingProfile || saving}
                   className={`h-11 flex-1 rounded-full border px-4 text-sm font-semibold transition ${
                     hasDebt === "yes"
                       ? "border-[#C9A84C] bg-[#C9A84C] text-[#1B2A4A]"
@@ -222,6 +269,7 @@ export default function OnboardingProfilePage() {
                 <button
                   type="button"
                   onClick={() => setHasDebt("no")}
+                  disabled={fetchingProfile || saving}
                   className={`h-11 flex-1 rounded-full border px-4 text-sm font-semibold transition ${
                     hasDebt === "no"
                       ? "border-[#C9A84C] bg-[#C9A84C] text-[#1B2A4A]"
@@ -233,11 +281,15 @@ export default function OnboardingProfilePage() {
               </div>
             </div>
 
+            {fetchingProfile ? (
+              <p className="text-sm text-[#1B2A4A]/70">Loading saved profile...</p>
+            ) : null}
+
             {error ? <p className="text-sm font-medium text-red-600">{error}</p> : null}
 
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || fetchingProfile}
               className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#C9A84C] px-5 text-base font-semibold text-[#1B2A4A] transition hover:brightness-95"
             >
               {saving ? "Saving..." : "Continue"}

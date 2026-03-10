@@ -9,6 +9,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
@@ -34,6 +35,8 @@ export default function OnboardingHouseholdPage() {
 
   const [householdName, setHouseholdName] = useState("");
   const [country, setCountry] = useState("United States");
+  const [householdId, setHouseholdId] = useState<string | null>(null);
+  const [fetchingHousehold, setFetchingHousehold] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -42,6 +45,59 @@ export default function OnboardingHouseholdPage() {
       router.replace("/login");
     }
   }, [authLoading, user, router]);
+
+  useEffect(() => {
+    const loadExistingHousehold = async () => {
+      if (!user) {
+        return;
+      }
+
+      setFetchingHousehold(true);
+      setError("");
+
+      try {
+        const userSnap = await getDoc(doc(db, "users", user.uid));
+        const existingHouseholdId = userSnap.data()?.householdId as
+          | string
+          | null
+          | undefined;
+
+        if (!existingHouseholdId) {
+          setHouseholdId(null);
+          return;
+        }
+
+        const householdSnap = await getDoc(doc(db, "households", existingHouseholdId));
+        if (!householdSnap.exists()) {
+          setHouseholdId(null);
+          return;
+        }
+
+        const householdData = householdSnap.data();
+        setHouseholdId(existingHouseholdId);
+        setHouseholdName(
+          typeof householdData?.name === "string" ? householdData.name : "",
+        );
+        setCountry(
+          typeof householdData?.country === "string"
+            ? householdData.country
+            : "United States",
+        );
+      } catch (loadError) {
+        const message =
+          loadError instanceof Error
+            ? loadError.message
+            : "Could not load household data.";
+        setError(message);
+      } finally {
+        setFetchingHousehold(false);
+      }
+    };
+
+    if (!authLoading && user) {
+      void loadExistingHousehold();
+    }
+  }, [authLoading, user]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -55,20 +111,31 @@ export default function OnboardingHouseholdPage() {
     try {
       setSaving(true);
 
-      const householdRef = await addDoc(collection(db, "households"), {
-        name: householdName.trim(),
-        country,
-        createdBy: user.uid,
-        createdAt: serverTimestamp(),
-        members: [user.uid],
-        budget: null,
-      });
+      if (householdId) {
+        await updateDoc(doc(db, "households", householdId), {
+          name: householdName.trim(),
+          country,
+        });
 
-      await updateDoc(doc(db, "users", user.uid), {
-        householdId: householdRef.id,
-        role: "admin",
-        onboardingStep: "invite",
-      });
+        await updateDoc(doc(db, "users", user.uid), {
+          onboardingStep: "invite",
+        });
+      } else {
+        const householdRef = await addDoc(collection(db, "households"), {
+          name: householdName.trim(),
+          country,
+          createdBy: user.uid,
+          createdAt: serverTimestamp(),
+          members: [user.uid],
+          budget: null,
+        });
+
+        await updateDoc(doc(db, "users", user.uid), {
+          householdId: householdRef.id,
+          role: "admin",
+          onboardingStep: "invite",
+        });
+      }
 
       router.push("/onboarding/invite");
     } catch (submitError) {
@@ -124,6 +191,7 @@ export default function OnboardingHouseholdPage() {
                 placeholder="e.g. Cofre-Wise Family"
                 value={householdName}
                 onChange={(event) => setHouseholdName(event.target.value)}
+                disabled={fetchingHousehold || saving}
                 required
                 className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] px-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
               />
@@ -135,6 +203,7 @@ export default function OnboardingHouseholdPage() {
                 name="country"
                 value={country}
                 onChange={(event) => setCountry(event.target.value)}
+                disabled={fetchingHousehold || saving}
                 className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] px-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
               >
                 {countries.map((countryOption) => (
@@ -145,11 +214,15 @@ export default function OnboardingHouseholdPage() {
               </select>
             </label>
 
+            {fetchingHousehold ? (
+              <p className="text-sm text-[#1B2A4A]/70">Loading saved household...</p>
+            ) : null}
+
             {error ? <p className="text-sm font-medium text-red-600">{error}</p> : null}
 
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || fetchingHousehold}
               className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#C9A84C] px-5 text-base font-semibold text-[#1B2A4A] transition hover:brightness-95"
             >
               {saving ? "Saving..." : "Continue"}
