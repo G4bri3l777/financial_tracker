@@ -98,7 +98,7 @@ export default function OnboardingInvitePage() {
     if (!authLoading && user) {
       void setupInvite();
     }
-  }, [authLoading, user]);
+  }, [authLoading, user, router]);
 
   const inviteLink = useMemo(() => {
     if (!inviteCode || typeof window === "undefined") {

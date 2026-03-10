@@ -103,7 +103,7 @@ export default function OnboardingProfilePage() {
     if (!authLoading && user) {
       void loadExistingProfile();
     }
-  }, [authLoading, user, parsedDisplayName.first, parsedDisplayName.last]);
+  }, [authLoading, user, parsedDisplayName.first, parsedDisplayName.last, router]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

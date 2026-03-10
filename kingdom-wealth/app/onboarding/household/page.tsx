@@ -114,7 +114,7 @@ export default function OnboardingHouseholdPage() {
     if (!authLoading && user) {
       void loadExistingHousehold();
     }
-  }, [authLoading, user]);
+  }, [authLoading, user, router]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
