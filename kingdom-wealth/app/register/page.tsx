@@ -1,6 +1,50 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { registerUser } from "../lib/auth";
 
 export default function RegisterPage() {
+  const router = useRouter();
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    if (!agreedToTerms) {
+      setError("Please agree to Terms of Service.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await registerUser(email, password, firstName, lastName);
+      router.push("/onboarding/profile");
+    } catch (submitError) {
+      const message =
+        submitError instanceof Error
+          ? submitError.message
+          : "Registration failed. Please try again.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white px-4 py-8 text-[#1B2A4A] md:px-6 lg:px-8 md:bg-[#F4F6FA]">
       <div className="mx-auto w-full max-w-md">
@@ -22,7 +66,7 @@ export default function RegisterPage() {
             </p>
           </header>
 
-          <form className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <label className="block space-y-1.5">
                 <span className="text-sm font-medium">First name</span>
@@ -31,6 +75,9 @@ export default function RegisterPage() {
                   name="firstName"
                   autoComplete="given-name"
                   placeholder="John"
+                  value={firstName}
+                  onChange={(event) => setFirstName(event.target.value)}
+                  required
                   className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] px-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
                 />
               </label>
@@ -42,6 +89,9 @@ export default function RegisterPage() {
                   name="lastName"
                   autoComplete="family-name"
                   placeholder="Doe"
+                  value={lastName}
+                  onChange={(event) => setLastName(event.target.value)}
+                  required
                   className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] px-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
                 />
               </label>
@@ -54,6 +104,9 @@ export default function RegisterPage() {
                 name="email"
                 autoComplete="email"
                 placeholder="you@example.com"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
                 className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] px-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
               />
             </label>
@@ -65,6 +118,9 @@ export default function RegisterPage() {
                 name="password"
                 autoComplete="new-password"
                 placeholder="At least 8 characters"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
                 className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] px-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
               />
             </label>
@@ -76,6 +132,9 @@ export default function RegisterPage() {
                 name="confirmPassword"
                 autoComplete="new-password"
                 placeholder="Re-enter password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                required
                 className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] px-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
               />
             </label>
@@ -84,6 +143,8 @@ export default function RegisterPage() {
               <input
                 type="checkbox"
                 name="terms"
+                checked={agreedToTerms}
+                onChange={(event) => setAgreedToTerms(event.target.checked)}
                 className="mt-0.5 h-4 w-4 rounded border-[#1B2A4A]/30 accent-[#C9A84C]"
               />
               <span className="text-sm text-[#1B2A4A]/85">
@@ -91,11 +152,16 @@ export default function RegisterPage() {
               </span>
             </label>
 
+            {error ? (
+              <p className="text-sm font-medium text-red-600">{error}</p>
+            ) : null}
+
             <button
-              type="button"
+              type="submit"
+              disabled={loading}
               className="mt-2 inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#C9A84C] px-5 text-base font-semibold text-[#1B2A4A] transition hover:brightness-95"
             >
-              Create Account
+              {loading ? "Creating Account..." : "Create Account"}
             </button>
           </form>
 

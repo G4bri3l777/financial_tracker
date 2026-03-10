@@ -1,6 +1,36 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { loginUser } from "../lib/auth";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+
+    try {
+      setLoading(true);
+      await loginUser(email, password);
+      router.push("/dashboard");
+    } catch (submitError) {
+      const message =
+        submitError instanceof Error
+          ? submitError.message
+          : "Login failed. Please try again.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const formContent = (
     <>
       <header className="mb-8 space-y-2 md:mb-6">
@@ -13,7 +43,7 @@ export default function LoginPage() {
         </p>
       </header>
 
-      <form className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4">
         <label className="block space-y-1.5">
           <span className="text-sm font-medium">Email</span>
           <input
@@ -21,6 +51,9 @@ export default function LoginPage() {
             name="email"
             autoComplete="email"
             placeholder="you@example.com"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
             className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] px-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
           />
         </label>
@@ -32,24 +65,30 @@ export default function LoginPage() {
             name="password"
             autoComplete="current-password"
             placeholder="Enter your password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
             className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] px-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
           />
         </label>
 
         <div className="flex justify-end">
           <Link
-            href="#"
+            href="/forgot-password"
             className="text-sm font-medium text-[#1B2A4A]/80 underline underline-offset-2"
           >
             Forgot password?
           </Link>
         </div>
 
+        {error ? <p className="text-sm font-medium text-red-600">{error}</p> : null}
+
         <button
-          type="button"
+          type="submit"
+          disabled={loading}
           className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#C9A84C] px-5 text-base font-semibold text-[#1B2A4A] transition hover:brightness-95"
         >
-          Sign In
+          {loading ? "Signing In..." : "Sign In"}
         </button>
       </form>
 
