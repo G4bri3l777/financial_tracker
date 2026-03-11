@@ -12,7 +12,7 @@ export async function callClaude(messages: ClaudeMessage[], system?: string) {
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 8192,
+      max_tokens: 32000,
       system: system ?? "",
       messages,
     }),

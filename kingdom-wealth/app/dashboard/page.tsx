@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../hooks/useAuth";
@@ -33,6 +34,12 @@ export default function DashboardPage() {
       <h1 className="text-3xl font-bold text-[#1B2A4A] md:text-4xl">
         Welcome to Kingdom Wealth, {user.displayName || "Friend"}!
       </h1>
+      <Link
+        href="/settings/categories"
+        className="mt-4 inline-flex h-10 items-center justify-center rounded-lg border border-[#C9A84C] px-4 text-sm font-semibold text-[#1B2A4A] transition hover:bg-[#FFF8E8]"
+      >
+        Manage Categories
+      </Link>
       <button
         type="button"
         onClick={handleSignOut}
