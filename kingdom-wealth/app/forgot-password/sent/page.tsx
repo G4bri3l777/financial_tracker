@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
-export default function ForgotPasswordSentPage() {
+function PageContent() {
   const searchParams = useSearchParams();
   const email = searchParams.get("email");
 
@@ -50,5 +51,19 @@ export default function ForgotPasswordSentPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function ForgotPasswordSentPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-navy">Loading...</div>
+        </div>
+      }
+    >
+      <PageContent />
+    </Suspense>
   );
 }
