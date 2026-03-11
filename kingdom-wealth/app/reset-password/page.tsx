@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { confirmPasswordReset, verifyPasswordResetCode } from "firebase/auth";
-import { auth } from "../lib/firebase";
+import { auth } from "@/app/lib/firebase";
 
 function PageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const mode = searchParams.get("mode");
   const oobCode = searchParams.get("oobCode");
 
   const [accountEmail, setAccountEmail] = useState("");
@@ -17,12 +17,13 @@ function PageContent() {
   const [loading, setLoading] = useState(false);
   const [validating, setValidating] = useState(true);
   const [success, setSuccess] = useState(false);
+  const [validCode, setValidCode] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const validateCode = async () => {
-      if (mode !== "resetPassword" || !oobCode) {
-        setError("This password reset link is invalid or incomplete.");
+      if (!oobCode) {
+        setError("This password reset link is invalid or has expired.");
         setValidating(false);
         return;
       }
@@ -30,19 +31,25 @@ function PageContent() {
       try {
         const email = await verifyPasswordResetCode(auth, oobCode);
         setAccountEmail(email);
-      } catch (validationError) {
-        const message =
-          validationError instanceof Error
-            ? validationError.message
-            : "This reset link has expired or is no longer valid.";
-        setError(message);
+        setValidCode(true);
+      } catch {
+        setError("This password reset link is invalid or has expired.");
+        setValidCode(false);
       } finally {
         setValidating(false);
       }
     };
 
     void validateCode();
-  }, [mode, oobCode]);
+  }, [oobCode]);
+
+  useEffect(() => {
+    if (!success) return;
+    const timeout = window.setTimeout(() => {
+      router.push("/login");
+    }, 2000);
+    return () => window.clearTimeout(timeout);
+  }, [success, router]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -62,12 +69,9 @@ function PageContent() {
       setLoading(true);
       await confirmPasswordReset(auth, oobCode, password);
       setSuccess(true);
-    } catch (submitError) {
-      const message =
-        submitError instanceof Error
-          ? submitError.message
-          : "Could not reset password. Please request a new link.";
-      setError(message);
+      setError("");
+    } catch {
+      setError("Could not reset password. Please request a new reset link.");
     } finally {
       setLoading(false);
     }
@@ -96,7 +100,7 @@ function PageContent() {
 
           {validating ? <p className="text-sm text-[#1B2A4A]/75">Loading...</p> : null}
 
-          {!validating && !success ? (
+          {!validating && validCode && !success ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               {accountEmail ? (
                 <p className="rounded-xl bg-[#F4F6FA] p-3 text-sm text-[#1B2A4A]/85">
@@ -147,24 +151,23 @@ function PageContent() {
           {success ? (
             <div className="space-y-4">
               <p className="rounded-xl bg-[#F4F6FA] p-4 text-sm text-[#1B2A4A]/85">
-                Your password was updated successfully.
+                Password updated! Redirecting to login...
               </p>
-              <Link
-                href="/login"
-                className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#C9A84C] px-5 text-base font-semibold text-[#1B2A4A] transition hover:brightness-95"
-              >
-                Continue to login
-              </Link>
             </div>
           ) : null}
 
-          {!validating && error && !accountEmail ? (
-            <Link
-              href="/forgot-password"
-              className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-[#1B2A4A]/20 bg-white px-5 text-base font-semibold text-[#1B2A4A] transition hover:bg-[#F4F6FA]"
-            >
-              Request a new reset link
-            </Link>
+          {!validating && !validCode ? (
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-red-600">
+                This password reset link is invalid or has expired.
+              </p>
+              <Link
+                href="/forgot-password"
+                className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-[#1B2A4A]/20 bg-white px-5 text-base font-semibold text-[#1B2A4A] transition hover:bg-[#F4F6FA]"
+              >
+                Request new reset link
+              </Link>
+            </div>
           ) : null}
         </main>
       </div>
