@@ -18,7 +18,7 @@ function PageContent() {
   const [validating, setValidating] = useState(true);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
-ß
+
   useEffect(() => {
     const validateCode = async () => {
       if (mode !== "resetPassword" || !oobCode) {
