@@ -1,0 +1,81 @@
+{
+  "statement": {
+    "bankName": "Credit One Bank",
+    "accountHolder": "Gabriel Cofre",
+    "accountLast4": "9427",
+    "accountType": "credit",
+    "statementStart": "2026-02-21",
+    "statementEnd": "2026-03-20",
+    "openingBalance": 8.25,
+    "closingBalance": 276.31,
+    "creditLimit": 800.00,
+    "currency": "USD"
+  },
+  "transactions": [
+    {
+      "date": "2026-03-05",
+      "description": "STATE FARM INSURANCE 800-956-6310 IL",
+      "amount": 297.98,
+      "direction": "debit",
+      "type": "expense",
+      "transferType": null,
+      "merchantName": "State Farm",
+      "category": "Transport",
+      "subcat": "Car Insurance",
+      "isSubscription": true,
+      "confidence": 0.9,
+      "needsReview": true,
+      "flagReason": "Largest State Farm charge seen across all statements ($297.98) — significantly higher than prior cycles; combined with same-day $10.08 charge, total is $308.06 this cycle. Warrants verification with State Farm.",
+      "transferPairHint": null
+    },
+    {
+      "date": "2026-03-05",
+      "description": "STATE FARM INSURANCE 800-956-6310 IL",
+      "amount": 10.08,
+      "direction": "debit",
+      "type": "expense",
+      "transferType": null,
+      "merchantName": "State Farm",
+      "category": "Transport",
+      "subcat": "Car Insurance",
+      "isSubscription": false,
+      "confidence": 0.8,
+      "needsReview": true,
+      "flagReason": "Recurring $10.08 State Farm charge — seen every blue card statement cycle; likely a separate rider or policy add-on",
+      "transferPairHint": null
+    },
+    {
+      "date": "2026-03-10",
+      "description": "ANTHROPIC ANTHROPIC.COMCA",
+      "amount": 10.00,
+      "direction": "debit",
+      "type": "expense",
+      "transferType": null,
+      "merchantName": "Anthropic",
+      "category": "Personal",
+      "subcat": "Subscriptions",
+      "isSubscription": true,
+      "confidence": 1.0,
+      "needsReview": false,
+      "flagReason": null,
+      "transferPairHint": null
+    },
+    {
+      "date": "2026-03-11",
+      "description": "PAYMENT - MOBILE APP LAS VEGAS NV",
+      "amount": 50.00,
+      "direction": "credit",
+      "type": "transfer",
+      "transferType": "card-payment",
+      "merchantName": "Credit One Bank Payment",
+      "category": null,
+      "subcat": null,
+      "isSubscription": false,
+      "confidence": 1.0,
+      "needsReview": false,
+      "flagReason": null,
+      "transferPairHint": null
+    }
+  ],
+  "parserNotes": "Found 4 transactions: 3 purchases/debits, 1 card payment (credit). Data sourced from online account portal (since last statement), not a full closed statement — statement period end date of 03/20/2026 is estimated. Current balance $276.31; available credit $420.00 of $800.00 limit. Minimum due $0.00 by 03/16/2026. Payment of $50.00 on 03/11 does not appear to have triggered an express payment fee, unlike prior cycles — possibly paid via standard (non-express) method. Two State Farm charges on 03/05: $297.98 (largest single insurance charge in entire statement history) + recurring $10.08, total $308.06. Anthropic charge ($10.00) is a Claude.ai subscription — note this card now has the subscription whereas the green card had it on 02/09/2026 for $20.00; possible plan change or account switch. Note: this is portal/pending data — some transactions may still be in process and could change before statement close."
+}

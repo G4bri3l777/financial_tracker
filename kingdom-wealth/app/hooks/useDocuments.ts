@@ -20,6 +20,14 @@ export type HouseholdDocument = {
   status?: string;
   transactionCount?: number;
   error?: string | null;
+  statementStart?: string;
+  statementEnd?: string;
+  accountDocId?: string;
+  parserNotes?: string;
+  bankName?: string;
+  accountLast4?: string;
+  openingBalance?: number | null;
+  closingBalance?: number | null;
 } & DocumentData;
 
 export function useDocuments(householdId?: string) {

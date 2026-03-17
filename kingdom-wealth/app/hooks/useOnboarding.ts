@@ -9,6 +9,7 @@ export type OnboardingStep =
   | "household"
   | "invite"
   | "review"
+  | "questions"
   | "analyzing"
   | "complete";
 

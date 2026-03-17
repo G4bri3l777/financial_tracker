@@ -78,7 +78,7 @@ export const CATEGORIES = [
     emoji: "💳",
     color: "#F44336",
     description: "Credit cards, loans, medical debt",
-    subcategories: ["Credit Card", "Student Loan", "Personal Loan", "Medical Debt"],
+    subcategories: ["Credit Card", "Student Loan", "Car Loan", "Personal Loan", "Medical Debt"],
     defaultType: "expense" as TransactionType,
   },
   {

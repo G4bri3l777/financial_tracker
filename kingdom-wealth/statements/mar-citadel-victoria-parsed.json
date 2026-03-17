@@ -1,0 +1,60 @@
+{
+  "statement": {
+    "bankName": "Citadel Credit Union",
+    "accountHolder": "Victoria G Wise",
+    "accountLast4": "5668",
+    "accountType": "checking",
+    "statementStart": "2026-03-01",
+    "statementEnd": "2026-03-31",
+    "openingBalance": 6192.56,
+    "closingBalance": 7473.52,
+    "creditLimit": null,
+    "currency": "USD",
+    "subAccounts": [
+      {
+        "id": "savings-0000",
+        "label": "Star Savings",
+        "type": "savings",
+        "openingBalance": 6192.56,
+        "closingBalance": 7473.52
+      }
+    ]
+  },
+  "transactions": [
+    {
+      "date": "2026-03-12",
+      "description": "Deposit Ach Word Of Life Chr Type: Payroll CO: Word Of Life Chr Entry Class Code: Ach Trace Number: XX0096",
+      "amount": 1290.96,
+      "direction": "credit",
+      "type": "income",
+      "transferType": null,
+      "merchantName": "Word of Life Church",
+      "category": "Income",
+      "subcat": "Salary",
+      "subAccount": "savings-0000",
+      "isSubscription": false,
+      "confidence": 1.0,
+      "needsReview": false,
+      "flagReason": null,
+      "transferPairHint": null
+    },
+    {
+      "date": "2026-03-12",
+      "description": "Withdrawal Bad Address",
+      "amount": 10.00,
+      "direction": "debit",
+      "type": "expense",
+      "transferType": null,
+      "merchantName": null,
+      "category": "Personal",
+      "subcat": null,
+      "subAccount": "savings-0000",
+      "isSubscription": false,
+      "confidence": 0.4,
+      "needsReview": true,
+      "flagReason": "Description 'Bad Address' is a bank-generated fee for returned mail — charged when statements or notices cannot be delivered due to an invalid address on file. Not a merchant purchase.",
+      "transferPairHint": null
+    }
+  ],
+  "parserNotes": "Found 2 transactions — both in savings-0000. Data sourced from online portal (current cycle, not yet closed). Balance as of 03/12: $7,473.52. Only two transactions visible so far this cycle — payroll deposit ($1,290.96, consistent with recent amounts) and a $10.00 'Bad Address' fee, which Citadel charges when mail is undeliverable. This fee suggests the address on file may be outdated — worth updating at CitadelBanking.com or a branch. Checking account (0071) showed no activity this cycle as of 03/12, consistent with the prior two months. Cycle not yet closed — additional transactions may post before month end."
+}

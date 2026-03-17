@@ -1,21 +1,24 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  addDoc,
   collection,
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   updateDoc,
+  where,
   writeBatch,
 } from "firebase/firestore";
 import { useAuth } from "@/app/hooks/useAuth";
+import { useAccounts, type AccountSubtype, type AccountType } from "@/app/hooks/useAccounts";
 import { useDocuments } from "@/app/hooks/useDocuments";
 import { useMembers } from "@/app/hooks/useMembers";
 import { useSubcategories } from "@/app/hooks/useSubcategories";
@@ -45,6 +48,24 @@ type Transaction = {
   flagReason: string;
   subcat: string;
   reviewedReason: string;
+  accountId: string;
+  accountLabel: string;
+  transferType: "internal" | "external-own" | "external-third-party" | "";
+  transferTo: string;
+  transferFrom: string;
+  transferPairId: string;
+  transferNote: string;
+  addedManually: boolean;
+  createdAt: unknown;
+  // New fields from the ideal schema
+  merchantName: string;
+  direction: "debit" | "credit" | "";
+  confidence: number;
+  isSubscription: boolean;
+  transferFromAccountId: string;
+  transferToAccountId: string;
+  sourceDocId: string;
+  month: string;
 };
 
 type SortKey = "date" | "desc" | "amount" | "category" | "assignedToName";
@@ -53,17 +74,42 @@ type TransactionPatch = Partial<Omit<Transaction, "id">> & {
   reviewedAt?: unknown;
 };
 
+type ReviewTab = "accounts" | "transactions";
+type QuickFilter = "all" | "unreviewed" | "reviewed" | "flagged" | "no-account";
+type TransferSubtypeFilter =
+  | "all"
+  | "internal"
+  | "external-own"
+  | "external-third-party"
+  | "unclassified";
+type AccountDraft = {
+  id?: string;
+  bankName: string;
+  nickname: string;
+  last4: string;
+  creditLimit: string;
+  type: AccountType;
+  subtype: AccountSubtype;
+  owner: string;
+  ownerName: string;
+  color: string;
+};
+
+type NewTransactionForm = {
+  date: string;
+  desc: string;
+  amount: string;
+  type: TransactionType;
+  transferType: "internal" | "external-own" | "external-third-party" | "";
+  category: string;
+  subcat: string;
+  accountId: string;
+  assignedTo: string;
+  comment: string;
+};
+
 function formatMoney(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
-}
-
-function getSignedAmount(tx: Pick<Transaction, "amount" | "type">) {
-  const sign = tx.type === "income" || tx.type === "refund" ? "+" : "-";
-  return `${sign}${formatMoney(Math.abs(tx.amount || 0))}`;
-}
-
-function getAmountColor(tx: Pick<Transaction, "type">) {
-  return tx.type === "income" || tx.type === "refund" ? "text-green-700" : "text-red-600";
 }
 
 function getTypePillClasses(type: TransactionType) {
@@ -73,28 +119,639 @@ function getTypePillClasses(type: TransactionType) {
   return "bg-red-100 text-red-700";
 }
 
+function isThirdPartyTransfer(tx: Pick<Transaction, "type" | "transferType">) {
+  return tx.type === "transfer" && tx.transferType === "external-third-party";
+}
+
+
+function detectSuggestedTransferType(
+  description: string,
+  hasHouseholdAccount: boolean,
+): "internal" | "external-third-party" | null {
+  const text = description.toLowerCase();
+  const internalKeywords = [
+    "transfer to",
+    "transfer from",
+    "online transfer",
+    "credit card payment",
+    "card payment",
+    "payment thank you",
+    "autopay",
+    "mobile transfer",
+    "account transfer",
+  ];
+  const thirdPartyKeywords = [
+    "zelle to",
+    "venmo",
+    "paypal",
+    "cashapp",
+    "wire transfer",
+    "ach to",
+    "send money",
+  ];
+
+  if (hasHouseholdAccount && internalKeywords.some((k) => text.includes(k))) {
+    return "internal";
+  }
+  if (thirdPartyKeywords.some((k) => text.includes(k))) {
+    return "external-third-party";
+  }
+  return null;
+}
+
+function toYmd(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+// ─── MONEY FLOW & ACCOUNT STATUS SECTION ──────────────────────────────────────
+
+function AccountStatusBadge({ status }: { status: "healthy" | "watch" | "alert" }) {
+  if (status === "healthy")
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-700">
+        <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+        Healthy
+      </span>
+    );
+  if (status === "watch")
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+        Watch
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
+      <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+      Alert
+    </span>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- reserved for future use
+function MoneyFlowSectionUnused({
+  accounts,
+  transactions,
+  onViewAccountTransactions,
+}: {
+  accounts: Array<{
+    id: string;
+    nickname: string;
+    bankName: string;
+    last4: string;
+    type: string;
+    color?: string;
+    ownerName: string;
+    creditLimit?: number | null;
+  }>;
+  transactions: Transaction[];
+  onViewAccountTransactions: (accountId: string) => void;
+}) {
+  const fmt = (n: number) =>
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    }).format(n);
+
+  const fmtFull = (n: number) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+
+const accountStats = useMemo(() => {
+  return accounts.map((acc) => {
+    const txns = transactions.filter((t) => t.accountId === acc.id);
+    const isCreditCard = acc.type === 'credit';
+
+    // Real income = salary, dividends, gifts coming in
+    const realIncome = txns.reduce((s, t) =>
+      t.type === 'income' || t.type === 'refund' ? s + t.amount : s, 0);
+
+    // Real expenses = actual purchases paid with this account
+    const realExpenses = txns.reduce((s, t) =>
+      t.type === 'expense' ? s + t.amount : s, 0);
+
+    // Transfer direction depends on account type:
+    // Credit card: transfers = payments RECEIVED (money coming IN to pay balance)
+    // Checking/Savings: transfers = money SENT OUT to pay bills or move funds
+    const transferAmount = txns.reduce((s, t) =>
+      t.type === 'transfer' ? s + t.amount : s, 0);
+
+    const transferSent = isCreditCard ? 0 : transferAmount;
+    const transferRecv = isCreditCard ? transferAmount : 0;
+
+    // NET for display:
+    // Credit card: how much unpaid balance remains = charges - payments received
+    // Checking/Savings: real income minus real direct expenses (transfers neutral)
+    const creditBalance = isCreditCard
+      ? Math.max(0, realExpenses - transferRecv)
+      : 0;
+    const net = isCreditCard
+      ? -(creditBalance)  // negative = you owe money
+      : realIncome - realExpenses;
+
+    // Credit utilization based on ACTUAL balance (charges minus payments)
+    const creditLimit = Number(acc.creditLimit ?? 0);
+    const utilization = isCreditCard && creditLimit > 0
+      ? Math.min(150, Math.round((creditBalance / creditLimit) * 100))
+      : null;
+
+    // Health status
+    let status: 'healthy' | 'watch' | 'alert' = 'healthy';
+    const unreviewedCount = txns.filter((t) => !t.reviewed).length;
+    const flaggedCount = txns.filter((t) => t.flagged).length;
+    if (flaggedCount > 0) status = 'alert';
+    else if (utilization !== null && utilization > 60) status = 'alert';
+    else if (utilization !== null && utilization > 30) status = 'watch';
+    else if (unreviewedCount > 5) status = 'watch';
+
+    // Top spending category
+    const catMap: Record<string, number> = {};
+    txns.forEach((t) => {
+      if (t.type === 'expense' && t.category) {
+        catMap[t.category] = (catMap[t.category] ?? 0) + t.amount;
+      }
+    });
+    const topCategory = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0];
+
+    // 3 most recent transactions
+    const recent = [...txns]
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 3);
+
+    const txCount = txns.length;
+
+    return {
+      ...acc,
+      realIncome,
+      realExpenses,
+      transferSent,
+      transferRecv,
+      creditBalance,
+      net,
+      unreviewedCount,
+      flaggedCount,
+      txCount,
+      utilization,
+      creditLimit,
+      status,
+      topCategory,
+      recent,
+    };
+  });
+}, [accounts, transactions]);
+
+const transferFlows = useMemo(() => {
+  const flowMap = new Map<string, {
+    fromId: string; toId: string;
+    fromLabel: string; toLabel: string;
+    fromColor: string; toColor: string;
+    total: number; count: number;
+  }>();
+
+  // Group transfer transactions by pairId
+  const byPairId = new Map<string, Transaction[]>();
+  for (const tx of transactions) {
+    if (tx.type !== 'transfer' || !tx.transferPairId) continue;
+    const group = byPairId.get(tx.transferPairId) ?? [];
+    group.push(tx);
+    byPairId.set(tx.transferPairId, group);
+  }
+
+  const pairs = Array.from(byPairId.values());
+  for (const pair of pairs) {
+    if (pair.length < 2) continue;
+
+    // Identify sender (checking/savings) and receiver (credit)
+    const sender = pair.find((t) => {
+      const acc = accounts.find((a) => a.id === t.accountId);
+      return acc && acc.type !== 'credit';
+    });
+    const receiver = pair.find((t) => {
+      const acc = accounts.find((a) => a.id === t.accountId);
+      return acc && acc.type === 'credit';
+    });
+
+    // Fallback: if both same type, first is sender second is receiver
+    const fromTx = sender ?? pair[0];
+    const toTx = receiver ?? pair[1];
+
+    const fromAcc = accounts.find((a) => a.id === fromTx.accountId);
+    const toAcc = accounts.find((a) => a.id === toTx.accountId);
+    if (!fromAcc || !toAcc || fromAcc.id === toAcc.id) continue;
+
+    const key = `${fromAcc.id}__${toAcc.id}`;
+    const existing = flowMap.get(key);
+    if (existing) {
+      existing.total += fromTx.amount;
+      existing.count += 1;
+    } else {
+      flowMap.set(key, {
+        fromId: fromAcc.id,
+        toId: toAcc.id,
+        fromLabel: fromAcc.nickname,
+        toLabel: toAcc.nickname,
+        fromColor: fromAcc.color ?? '#C9A84C',
+        toColor: toAcc.color ?? '#1B2A4A',
+        total: fromTx.amount,
+        count: 1,
+      });
+    }
+  }
+
+  return Array.from(flowMap.values()).sort((a, b) => b.total - a.total);
+}, [accounts, transactions]);
+
+  const totalIncome = accountStats.reduce((s, a) => s + a.realIncome, 0);
+  const totalExpenses = accountStats.reduce((s, a) => s + a.realExpenses, 0);
+  const totalMoved = transferFlows.reduce((s, f) => s + f.total, 0);
+  const maxBar = Math.max(
+    ...accountStats.map((a) => Math.max(a.realIncome, a.realExpenses)),
+    1,
+  );
+
+  if (accounts.length === 0) return null;
+
+  return (
+    <div className="space-y-5">
+      {/* ── HOUSEHOLD KPI STRIP ── */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          {
+            label: "Total Income",
+            value: fmt(totalIncome),
+            color: "#16A34A",
+            bg: "rgba(22,163,74,0.07)",
+            icon: "💵",
+          },
+          {
+            label: "Total Expenses",
+            value: fmt(totalExpenses),
+            color: "#DC2626",
+            bg: "rgba(220,38,38,0.07)",
+            icon: "💸",
+          },
+          {
+            label: "Money Moved",
+            value: fmt(totalMoved),
+            color: "#2563EB",
+            bg: "rgba(37,99,235,0.07)",
+            icon: "↔",
+          },
+        ].map((item) => (
+          <div key={item.label} className="rounded-2xl p-4 text-center" style={{ backgroundColor: item.bg }}>
+            <p className="text-2xl">{item.icon}</p>
+            <p className="mt-1 text-lg font-bold" style={{ color: item.color }}>
+              {item.value}
+            </p>
+            <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-widest text-[#1B2A4A]/50">
+              {item.label}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* ── TRANSFER FLOWS ── */}
+      {transferFlows.length > 0 && (
+        <div className="rounded-2xl border border-[#E4E8F0] bg-[#F9FAFC] p-4">
+          <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#1B2A4A]/40">
+            ↔ Money Flows Between Accounts
+          </p>
+          <div className="space-y-2">
+            {transferFlows.map((flow) => {
+              const pct = Math.max(6, Math.round((flow.total / totalMoved) * 100));
+              return (
+                <div key={`${flow.fromId}__${flow.toId}`} className="rounded-xl border border-[#E4E8F0] bg-white p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className="rounded-full px-2.5 py-1 text-[11px] font-bold text-white"
+                      style={{ backgroundColor: flow.fromColor }}
+                    >
+                      {flow.fromLabel}
+                    </span>
+                    <svg width="20" height="10" viewBox="0 0 20 10" className="shrink-0">
+                      <path
+                        d="M0 5 L14 5 M10 1 L18 5 L10 9"
+                        stroke="#9AA5B4"
+                        strokeWidth="1.5"
+                        fill="none"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    <span
+                      className="rounded-full px-2.5 py-1 text-[11px] font-bold text-white"
+                      style={{ backgroundColor: flow.toColor }}
+                    >
+                      {flow.toLabel}
+                    </span>
+                    <span className="ml-auto text-sm font-bold text-[#1B2A4A]">{fmt(flow.total)}</span>
+                    <span className="rounded-full bg-[#F4F6FA] px-2 py-0.5 text-[10px] text-[#9AA5B4]">
+                      {flow.count}×
+                    </span>
+                  </div>
+                  {/* Flow bar */}
+                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[#F4F6FA]">
+                    <div
+                      className="h-1.5 rounded-full"
+                      style={{
+                        width: `${pct}%`,
+                        background: `linear-gradient(90deg, ${flow.fromColor}, ${flow.toColor})`,
+                      }}
+                    />
+                  </div>
+                  <p className="mt-1 text-[10px] text-[#9AA5B4]">
+                    avg {fmtFull(flow.total / flow.count)} per payment · {flow.count} payment
+                    {flow.count !== 1 ? "s" : ""} total
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── ACCOUNT STATUS CARDS ── */}
+      <div className="rounded-2xl border border-[#E4E8F0] bg-[#F9FAFC] p-4">
+        <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#1B2A4A]/40">
+          🏦 Account Status
+        </p>
+        <div className="space-y-3">
+          {accountStats.map((acc) => (
+            <div
+              key={acc.id}
+              className="overflow-hidden rounded-2xl border border-[#E4E8F0] bg-white"
+              style={{ borderLeftWidth: 4, borderLeftColor: acc.color ?? "#C9A84C" }}
+            >
+              {/* Card header */}
+              <div className="flex items-start justify-between gap-3 p-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+                    style={{ backgroundColor: acc.color ?? "#C9A84C" }}
+                  >
+                    {acc.ownerName.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="leading-tight font-semibold text-[#1B2A4A]">{acc.nickname}</p>
+                    <p className="text-[11px] text-[#9AA5B4]">
+                      {acc.bankName} ••{acc.last4}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <AccountStatusBadge status={acc.status} />
+                  <p className="text-[10px] text-[#9AA5B4]">{acc.txCount} transactions</p>
+                </div>
+              </div>
+
+              {/* Flow bars */}
+              <div className="space-y-1.5 px-4 pb-3">
+                {acc.realIncome > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="w-10 shrink-0 text-right text-[10px] font-semibold text-green-600">IN</span>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#F4F6FA]">
+                      <div
+                        className="h-1.5 rounded-full bg-green-400"
+                        style={{ width: `${Math.round((acc.realIncome / maxBar) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="w-20 shrink-0 text-right text-[10px] font-semibold text-green-700">
+                      {fmt(acc.realIncome)}
+                    </span>
+                  </div>
+                )}
+                {acc.realExpenses > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="w-10 shrink-0 text-right text-[10px] font-semibold text-red-500">OUT</span>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#F4F6FA]">
+                      <div
+                        className="h-1.5 rounded-full bg-red-400"
+                        style={{ width: `${Math.round((acc.realExpenses / maxBar) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="w-20 shrink-0 text-right text-[10px] font-semibold text-red-600">
+                      {fmt(acc.realExpenses)}
+                    </span>
+                  </div>
+                )}
+                {acc.type !== "credit" && acc.transferSent > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="w-10 text-right text-[10px] font-semibold text-blue-500 shrink-0">SENT</span>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#F4F6FA]">
+                      <div
+                        className="h-1.5 rounded-full bg-blue-300"
+                        style={{ width: `${Math.round((acc.transferSent / maxBar) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="w-20 shrink-0 text-right text-[10px] font-semibold text-blue-500">
+                      {fmt(acc.transferSent)}
+                    </span>
+                  </div>
+                )}
+                {acc.type === "credit" && acc.transferRecv > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="w-10 text-right text-[10px] font-semibold text-green-600 shrink-0">PAID</span>
+                    <div className="flex-1 rounded-full bg-[#F4F6FA] h-1.5 overflow-hidden">
+                      <div className="h-1.5 rounded-full bg-green-400"
+                        style={{ width: `${Math.round((acc.transferRecv / maxBar) * 100)}%` }} />
+                    </div>
+                    <span className="w-20 text-[10px] font-semibold text-green-700 shrink-0 text-right">
+                      {fmt(acc.transferRecv)}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Credit utilization bar (credit accounts only) */}
+              {acc.type === "credit" && acc.creditLimit > 0 && acc.utilization !== null && (
+                <div className="border-t border-[#F4F6FA] px-4 py-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9AA5B4]">
+                      Credit Utilization
+                    </span>
+                    <span
+                      className="text-[10px] font-bold"
+                      style={{
+                        color:
+                          acc.utilization > 60
+                            ? "#DC2626"
+                            : acc.utilization > 30
+                              ? "#D97706"
+                              : "#16A34A",
+                      }}
+                    >
+                      {acc.utilization}%
+                    </span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-[#F4F6FA]">
+                    <div
+                      className="h-2 rounded-full transition-all"
+                      style={{
+                        width: `${acc.utilization}%`,
+                        backgroundColor:
+                          acc.utilization > 60
+                            ? "#EF4444"
+                            : acc.utilization > 30
+                              ? "#F59E0B"
+                              : "#22C55E",
+                      }}
+                    />
+                  </div>
+                  <p className="mt-1 text-[10px] text-[#9AA5B4]">
+                    {fmtFull(acc.creditBalance)} owed · {fmtFull(acc.transferRecv)} paid · {fmtFull(acc.creditLimit)} limit
+                  </p>
+                </div>
+              )}
+
+              {/* Stats row */}
+              <div className="flex flex-wrap items-center gap-3 border-t border-[#F4F6FA] px-4 py-2">
+                <div className="flex items-center gap-1.5">
+                  <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold
+                    ${acc.type === 'credit'
+                      ? (acc.creditBalance === 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')
+                      : (acc.net >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')
+                    }`}>
+                    {acc.type === 'credit' ? (acc.creditBalance === 0 ? '✓' : '!') : (acc.net >= 0 ? '+' : '−')}
+                  </span>
+                  <span className="text-xs font-bold"
+                    style={{
+                      color: acc.type === 'credit'
+                        ? (acc.creditBalance === 0 ? '#16A34A' : '#DC2626')
+                        : (acc.net >= 0 ? '#16A34A' : '#DC2626')
+                    }}>
+                    {acc.type === 'credit'
+                      ? (acc.creditBalance === 0
+                          ? 'Paid off ✓'
+                          : `${fmtFull(acc.creditBalance)} owed`)
+                      : `${acc.net >= 0 ? '+' : '−'}${fmt(Math.abs(acc.net))} net`
+                    }
+                  </span>
+                </div>
+                {acc.topCategory && (
+                  <span className="rounded-full bg-[#F4F6FA] px-2 py-0.5 text-[10px] text-[#1B2A4A]/70">
+                    Top: {acc.topCategory[0]} {fmt(acc.topCategory[1])}
+                  </span>
+                )}
+                {acc.flaggedCount > 0 && (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                    ⚠️ {acc.flaggedCount} flagged
+                  </span>
+                )}
+                {acc.unreviewedCount > 0 && (
+                  <span className="rounded-full bg-[#FFF8E8] px-2 py-0.5 text-[10px] font-semibold text-[#C9A84C]">
+                    ⏳ {acc.unreviewedCount} to review
+                  </span>
+                )}
+              </div>
+
+              {/* Recent transactions preview */}
+              {acc.recent.length > 0 && (
+                <div className="space-y-1 border-t border-[#F4F6FA] px-4 py-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">Recent</p>
+                  {acc.recent.map((tx) => (
+                    <div key={tx.id} className="flex items-center justify-between gap-2">
+                      <span className="max-w-[160px] truncate text-[11px] text-[#1B2A4A]/80">{tx.desc}</span>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="text-[10px] text-[#9AA5B4]">{tx.date}</span>
+                        <span
+                          className={`text-[11px] font-semibold ${
+                            tx.type === "income" || tx.type === "refund"
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {tx.type === "income" || tx.type === "refund" ? "+" : "−"}
+                          {fmtFull(tx.amount)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* View transactions button */}
+              <div className="border-t border-[#F4F6FA] px-4 py-2">
+                <button
+                  type="button"
+                  onClick={() => onViewAccountTransactions(acc.id)}
+                  className="flex w-full items-center justify-between rounded-lg bg-[#F9FAFC] px-3 py-2 text-xs font-semibold text-[#1B2A4A] transition hover:bg-[#F1F3F8]"
+                >
+                  <span>View all {acc.txCount} transactions</span>
+                  <span className="text-[#9AA5B4]">→</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function OnboardingReviewPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
 
   const [householdId, setHouseholdId] = useState("");
+  const [userOnboardingStep, setUserOnboardingStep] = useState("");
+  const [_activeTab, _setActiveTab] = useState<ReviewTab>("transactions");
   const [loadingContext, setLoadingContext] = useState(true);
   const [error, setError] = useState("");
-  const [startingAnalysis, setStartingAnalysis] = useState(false);
+  const [_startingAnalysis, setStartingAnalysis] = useState(false);
+  const [continuing, setContinuing] = useState(false);
   const [markingAllReviewed, setMarkingAllReviewed] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const parsingInFlightRef = useRef<Set<string>>(new Set());
+  const [_showDetailPanel, setShowDetailPanel] = useState(false);
+  const [selectedTxId, setSelectedTxId] = useState("");
+  const [_accountFormOpen, setAccountFormOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<AccountDraft | null>(null);
+  const [_savingAccount, setSavingAccount] = useState(false);
+  const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
+  const [savingTransaction, setSavingTransaction] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [addTransactionError, setAddTransactionError] = useState("");
+  const [shakeAddTransaction, setShakeAddTransaction] = useState(false);
+  const [newTransactionForm, setNewTransactionForm] = useState<NewTransactionForm>({
+    date: toYmd(new Date()),
+    desc: "",
+    amount: "",
+    type: "expense",
+    transferType: "",
+    category: "",
+    subcat: "",
+    accountId: "",
+    assignedTo: "",
+    comment: "",
+  });
+  const [_bulkAccountId, _setBulkAccountId] = useState("");
+  const [transferSubtypeFilter, _setTransferSubtypeFilter] = useState<TransferSubtypeFilter>("all");
+  const [_showTransfersSummary, _setShowTransfersSummary] = useState(false);
+  const [suggestedTransferTypeByTxId, setSuggestedTransferTypeByTxId] = useState<
+    Record<string, "internal" | "external-third-party">
+  >({});
+  const exportMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [docFilter, setDocFilter] = useState("all");
-  const [spouseFilter, setSpouseFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [flaggedFilter, setFlaggedFilter] = useState("all");
-  const [reviewedFilter, setReviewedFilter] = useState("unreviewed");
+  const [monthFilter, _setMonthFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [_activeDatePreset, setActiveDatePreset] = useState<
+    "this-month" | "last-month" | "last-3-months" | "all-time" | ""
+  >("");
+  const [spouseFilter, _setSpouseFilter] = useState("all");
+  const [accountFilter, setAccountFilter] = useState("all");
+  const [categoryFilter, _setCategoryFilter] = useState("all");
+  const [typeFilter, _setTypeFilter] = useState("all");
+  const [flaggedFilter, _setFlaggedFilter] = useState("all");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  const [reviewedFilter, _setReviewedFilter] = useState("unreviewed");
   const [search, setSearch] = useState("");
   const [subcategoryHideGraceUntil, setSubcategoryHideGraceUntil] = useState<Record<string, number>>(
     {},
@@ -103,10 +760,18 @@ export default function OnboardingReviewPage() {
   const [newSubcatDrafts, setNewSubcatDrafts] = useState<
     Record<string, { name: string; parentCategory: string }>
   >({});
+  const [focusMode, setFocusMode] = useState<"queue" | "all">("queue");
 
   const documents = useDocuments(householdId || undefined);
+  const { accounts, loading: _accountsLoading } = useAccounts(householdId || undefined);
   const members = useMembers(householdId || undefined);
-  const { subcatsByParent, addSubcategory } = useSubcategories(householdId || undefined);
+  const subcatOptions = useMemo(
+    () => ({
+      transactions: transactions.map((t) => ({ category: t.category, subcat: t.subcat })),
+    }),
+    [transactions],
+  );
+  const { subcatsByParent, addSubcategory } = useSubcategories(householdId || undefined, subcatOptions);
 
   useEffect(() => {
     const loadContext = async () => {
@@ -122,15 +787,13 @@ export default function OnboardingReviewPage() {
         const userData = userSnap.data();
         if (!userData) throw new Error("Could not find your user profile.");
 
-        if (userData.onboardingStep === "complete") {
-          router.replace("/dashboard");
-          return;
-        }
+        setUserOnboardingStep(String(userData.onboardingStep ?? ""));
 
         const foundHouseholdId =
           typeof userData.householdId === "string" ? userData.householdId : "";
         if (!foundHouseholdId) {
-          throw new Error("No household found for this account.");
+          router.replace("/onboarding/profile");
+          return;
         }
 
         setHouseholdId(foundHouseholdId);
@@ -186,6 +849,31 @@ export default function OnboardingReviewPage() {
             flagReason: String(data.flagReason ?? ""),
             subcat: String(data.subcat ?? ""),
             reviewedReason: String(data.reviewedReason ?? ""),
+            accountId: String(data.accountId ?? ""),
+            accountLabel: String(data.accountLabel ?? ""),
+            transferType:
+              data.transferType === "internal" ||
+              data.transferType === "external-own" ||
+              data.transferType === "external-third-party"
+                ? data.transferType
+                : "",
+            transferTo: String(data.transferTo ?? ""),
+            transferFrom: String(data.transferFrom ?? ""),
+            transferPairId: String(data.transferPairId ?? ""),
+            transferNote: String(data.transferNote ?? ""),
+            addedManually: Boolean(data.addedManually),
+            createdAt: data.createdAt ?? null,
+            merchantName: String(data.merchantName ?? ""),
+            direction:
+              data.direction === "debit" || data.direction === "credit"
+                ? data.direction
+                : "",
+            confidence: typeof data.confidence === "number" ? data.confidence : 1.0,
+            isSubscription: Boolean(data.isSubscription),
+            transferFromAccountId: String(data.transferFromAccountId ?? ""),
+            transferToAccountId: String(data.transferToAccountId ?? ""),
+            sourceDocId: String(data.sourceDocId ?? ""),
+            month: String(data.month ?? ""),
           } satisfies Transaction;
         });
         setTransactions(parsed);
@@ -195,54 +883,6 @@ export default function OnboardingReviewPage() {
 
     return unsubscribe;
   }, [householdId]);
-
-  useEffect(() => {
-    if (!householdId) {
-      return;
-    }
-
-    // FIX 6 — only parse docs with status === 'uploaded'.
-    const unparsedDocs = documents.filter((d) => d.status === "uploaded");
-    if (unparsedDocs.length === 0) {
-      return;
-    }
-
-    const parseDoc = async (docItem: (typeof documents)[number]) => {
-      if (parsingInFlightRef.current.has(docItem.id)) {
-        return;
-      }
-
-      parsingInFlightRef.current.add(docItem.id);
-
-      try {
-        const response = await fetch("/api/parse-document", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            storagePath: docItem.storagePath,
-            householdId,
-            docId: docItem.id,
-            fileName: docItem.fileName,
-          }),
-        });
-
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(`Parse failed: ${response.status} ${text.slice(0, 100)}`);
-        }
-      } catch (parseError) {
-        const message =
-          parseError instanceof Error ? parseError.message : "Could not parse one document.";
-        setError(message);
-      } finally {
-        parsingInFlightRef.current.delete(docItem.id);
-      }
-    };
-
-    for (const docItem of unparsedDocs) {
-      void parseDoc(docItem);
-    }
-  }, [documents, householdId]);
 
   useEffect(() => {
     if (!householdId || transactions.length === 0) {
@@ -290,30 +930,233 @@ export default function OnboardingReviewPage() {
     return map;
   }, [members]);
 
+  const accountById = useMemo(() => {
+    const map = new Map<string, (typeof accounts)[number]>();
+    for (const account of accounts) {
+      map.set(account.id, account);
+    }
+    return map;
+  }, [accounts]);
+
+  const _monthOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const tx of transactions) {
+      if (tx.date && tx.date.length >= 7) {
+        values.add(tx.date.slice(0, 7));
+      }
+    }
+    return Array.from(values).sort((a, b) => b.localeCompare(a));
+  }, [transactions]);
+
+  useEffect(() => {
+    console.log("accounts loaded:", accounts);
+  }, [accounts]);
+
+  const resetNewTransactionForm = () => {
+    setNewTransactionForm({
+      date: toYmd(new Date()),
+      desc: "",
+      amount: "",
+      type: "expense",
+      transferType: "",
+      category: "",
+      subcat: "",
+      accountId: "",
+      assignedTo: user?.uid || "",
+      comment: "",
+    });
+    setAddTransactionError("");
+    setShakeAddTransaction(false);
+  };
+
+  const _exportToCSV = (txns: Transaction[], filename: string) => {
+    const headers = [
+      "Date",
+      "Merchant",
+      "Amount",
+      "Type",
+      "TransferType",
+      "Category",
+      "Subcategory",
+      "Account",
+      "Bank",
+      "Person",
+      "Comment",
+      "Reviewed",
+      "Flagged",
+      "FlagReason",
+      "AddedManually",
+      "CreatedAt",
+    ];
+
+    const rows = txns.map((t) => {
+      const account = t.accountId ? accountById.get(t.accountId) : undefined;
+      const createdAtValue = t.createdAt as { toDate?: () => Date } | string | null | undefined;
+      const createdAt =
+        createdAtValue && typeof createdAtValue === "object" && typeof createdAtValue.toDate === "function"
+          ? createdAtValue.toDate().toISOString()
+          : typeof createdAtValue === "string"
+            ? createdAtValue
+            : "";
+
+      return [
+        t.date || "",
+        `"${(t.desc || "").replace(/"/g, '""')}"`,
+        Number.isFinite(t.amount) ? t.amount.toFixed(2) : "0.00",
+        t.type || "",
+        t.transferType || "",
+        t.category || "",
+        t.subcat || "",
+        account ? `${account.bankName} ••${account.last4}` : (t.accountLabel || ""),
+        account?.bankName || "",
+        t.assignedToName || "",
+        `"${(t.comment || "").replace(/"/g, '""')}"`,
+        t.reviewed ? "yes" : "no",
+        t.flagged ? "yes" : "no",
+        `"${(t.flagReason || "").replace(/"/g, '""')}"`,
+        t.addedManually ? "yes" : "no",
+        createdAt,
+      ].join(",");
+    });
+
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  useEffect(() => {
+    if (!newTransactionForm.assignedTo && user?.uid) {
+      setNewTransactionForm((prev) => ({ ...prev, assignedTo: user.uid }));
+    }
+  }, [newTransactionForm.assignedTo, user]);
+
+  useEffect(() => {
+    if (!showExportMenu) return;
+    const onClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (exportMenuRef.current && target && !exportMenuRef.current.contains(target)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [showExportMenu]);
+
+  useEffect(() => {
+    if (transactions.length === 0) return;
+    setSuggestedTransferTypeByTxId((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const tx of transactions) {
+        if (tx.type !== "transfer" || tx.transferType) continue;
+        if (next[tx.id]) continue;
+        const hasAccount = Boolean(tx.accountId && accountById.has(tx.accountId));
+        const suggestion = detectSuggestedTransferType(tx.desc, hasAccount);
+        if (suggestion) {
+          next[tx.id] = suggestion;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [transactions, accountById]);
+
+  const _applyDatePreset = (preset: "this-month" | "last-month" | "last-3-months" | "all-time") => {
+    const now = new Date();
+    if (preset === "all-time") {
+      setDateFrom("");
+      setDateTo("");
+      setActiveDatePreset("all-time");
+      return;
+    }
+
+    if (preset === "this-month") {
+      const from = new Date(now.getFullYear(), now.getMonth(), 1);
+      setDateFrom(toYmd(from));
+      setDateTo(toYmd(now));
+      setActiveDatePreset("this-month");
+      return;
+    }
+
+    if (preset === "last-month") {
+      const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const to = new Date(now.getFullYear(), now.getMonth(), 0);
+      setDateFrom(toYmd(from));
+      setDateTo(toYmd(to));
+      setActiveDatePreset("last-month");
+      return;
+    }
+
+    const from = new Date(now);
+    from.setMonth(now.getMonth() - 3);
+    setDateFrom(toYmd(from));
+    setDateTo(toYmd(now));
+    setActiveDatePreset("last-3-months");
+  };
+
   const filteredTransactions = useMemo(() => {
     const now = Date.now();
     return transactions.filter((tx) => {
       if (docFilter !== "all" && tx.docId !== docFilter) return false;
+      if (monthFilter !== "all" && tx.date.slice(0, 7) !== monthFilter) return false;
+      if (dateFrom && tx.date < dateFrom) return false;
+      if (dateTo && tx.date > dateTo) return false;
       if (spouseFilter !== "all" && tx.assignedTo !== spouseFilter) return false;
+      if (accountFilter === "__none__" && tx.accountId) return false;
+      if (accountFilter !== "all" && accountFilter !== "__none__" && tx.accountId !== accountFilter) {
+        return false;
+      }
       if (categoryFilter !== "all" && tx.category !== categoryFilter) return false;
       if (typeFilter !== "all" && tx.type !== typeFilter) return false;
+      if (transferSubtypeFilter === "unclassified" && !(tx.type === "transfer" && !tx.transferType)) {
+        return false;
+      }
+      if (
+        transferSubtypeFilter !== "all" &&
+        transferSubtypeFilter !== "unclassified" &&
+        tx.transferType !== transferSubtypeFilter
+      ) {
+        return false;
+      }
       if (flaggedFilter === "flagged" && !tx.flagged) return false;
-      const inSubcategoryGrace =
-        tx.reviewedReason === "subcategory" &&
-        typeof subcategoryHideGraceUntil[tx.id] === "number" &&
-        subcategoryHideGraceUntil[tx.id] > now;
-      if (reviewedFilter === "unreviewed" && tx.reviewed && !inSubcategoryGrace) return false;
-      if (reviewedFilter === "reviewed" && !tx.reviewed) return false;
+      // quickFilter takes priority over reviewedFilter
+      if (quickFilter === "unreviewed" && tx.reviewed) return false;
+      if (quickFilter === "reviewed" && !tx.reviewed) return false;
+      if (quickFilter === "flagged" && !tx.flagged) return false;
+      if (quickFilter === "no-account" && tx.accountId) return false;
+
+      // reviewedFilter only applies when quickFilter is not already filtering by review state
+      if (quickFilter === "all") {
+        const inSubcategoryGrace =
+          tx.reviewedReason === "subcategory" &&
+          typeof subcategoryHideGraceUntil[tx.id] === "number" &&
+          subcategoryHideGraceUntil[tx.id] > now;
+        if (reviewedFilter === "unreviewed" && tx.reviewed && !inSubcategoryGrace) return false;
+        if (reviewedFilter === "reviewed" && !tx.reviewed) return false;
+      }
       if (search.trim() && !tx.desc.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
   }, [
     transactions,
     docFilter,
+    monthFilter,
+    dateFrom,
+    dateTo,
     spouseFilter,
+    accountFilter,
     categoryFilter,
     typeFilter,
     flaggedFilter,
+    transferSubtypeFilter,
+    quickFilter,
     reviewedFilter,
     search,
     subcategoryHideGraceUntil,
@@ -337,7 +1180,12 @@ export default function OnboardingReviewPage() {
   const totalIncome = useMemo(
     () =>
       filteredTransactions.reduce(
-        (sum, tx) => (tx.type === "income" || tx.type === "refund" ? sum + tx.amount : sum),
+        (sum, tx) =>
+          tx.type === "income" || tx.type === "refund"
+            ? sum + tx.amount
+            : tx.type === "transfer" && tx.transferType !== "external-third-party"
+              ? sum
+              : sum,
         0,
       ),
     [filteredTransactions],
@@ -345,14 +1193,32 @@ export default function OnboardingReviewPage() {
   const totalExpenses = useMemo(
     () =>
       filteredTransactions.reduce(
-        (sum, tx) => (tx.type === "expense" || tx.type === "transfer" ? sum + tx.amount : sum),
+        (sum, tx) =>
+          tx.type === "expense" || isThirdPartyTransfer(tx) ? sum + tx.amount : sum,
         0,
       ),
     [filteredTransactions],
   );
-  const netAmount = totalIncome - totalExpenses;
+  const _netAmount = totalIncome - totalExpenses;
+  const _internalTransferVolume = useMemo(
+    () =>
+      filteredTransactions.reduce(
+        (sum, tx) => (tx.type === "transfer" && tx.transferType === "internal" ? sum + tx.amount : sum),
+        0,
+      ),
+    [filteredTransactions],
+  );
+  const _ownBankTransferVolume = useMemo(
+    () =>
+      filteredTransactions.reduce(
+        (sum, tx) =>
+          tx.type === "transfer" && tx.transferType === "external-own" ? sum + tx.amount : sum,
+        0,
+      ),
+    [filteredTransactions],
+  );
 
-  const dateRange = useMemo(() => {
+  const _dateRange = useMemo(() => {
     if (filteredTransactions.length === 0) {
       return "—";
     }
@@ -372,6 +1238,34 @@ export default function OnboardingReviewPage() {
     () => filteredTransactions.filter((tx) => tx.flagged && !tx.reviewed).length,
     [filteredTransactions],
   );
+  const unreviewedCount = useMemo(
+    () => transactions.filter((tx) => !tx.reviewed).length,
+    [transactions],
+  );
+  const assignedAccountCount = useMemo(
+    () => transactions.filter((tx) => Boolean(tx.accountId)).length,
+    [transactions],
+  );
+  const _unassignedAccountCount = Math.max(0, transactions.length - assignedAccountCount);
+  const _transferStats = useMemo(() => {
+    const txs = transactions.filter((tx) => tx.type === "transfer");
+    const internal = txs.filter((tx) => tx.transferType === "internal");
+    const externalOwn = txs.filter((tx) => tx.transferType === "external-own");
+    const thirdParty = txs.filter((tx) => tx.transferType === "external-third-party");
+    const unclassified = txs.filter((tx) => !tx.transferType);
+    const sum = (list: Transaction[]) => list.reduce((acc, tx) => acc + tx.amount, 0);
+    return {
+      totalCount: txs.length,
+      internalCount: internal.length,
+      internalAmount: sum(internal),
+      externalOwnCount: externalOwn.length,
+      externalOwnAmount: sum(externalOwn),
+      thirdPartyCount: thirdParty.length,
+      thirdPartyAmount: sum(thirdParty),
+      unclassifiedCount: unclassified.length,
+      unclassifiedAmount: sum(unclassified),
+    };
+  }, [transactions]);
   const totalReviewableCount = useMemo(
     () => transactions.filter((tx) => !tx.flagged).length,
     [transactions],
@@ -386,17 +1280,321 @@ export default function OnboardingReviewPage() {
   );
   const reviewedProgressPercent =
     totalReviewableCount > 0 ? Math.round((reviewedReviewableCount / totalReviewableCount) * 100) : 0;
+  const _accountProgressPercent =
+    transactions.length > 0 ? Math.round((assignedAccountCount / transactions.length) * 100) : 0;
+  const _activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (docFilter !== "all") count += 1;
+    if (monthFilter !== "all") count += 1;
+    if (dateFrom || dateTo) count += 1;
+    if (spouseFilter !== "all") count += 1;
+    if (accountFilter !== "all") count += 1;
+    if (categoryFilter !== "all") count += 1;
+    if (typeFilter !== "all") count += 1;
+    if (transferSubtypeFilter !== "all") count += 1;
+    if (flaggedFilter !== "all") count += 1;
+    if (quickFilter !== "all") count += 1;
+    if (reviewedFilter !== "unreviewed") count += 1;
+    if (search.trim()) count += 1;
+    return count;
+  }, [
+    accountFilter,
+    categoryFilter,
+    dateFrom,
+    dateTo,
+    docFilter,
+    flaggedFilter,
+    monthFilter,
+    quickFilter,
+    reviewedFilter,
+    search,
+    spouseFilter,
+    typeFilter,
+    transferSubtypeFilter,
+  ]);
 
-  const handleUpdateTransaction = async (
-    txId: string,
-    patch: TransactionPatch,
+  const handleUpdateTransaction = useCallback(
+    async (txId: string, patch: TransactionPatch) => {
+      if (!householdId) return;
+      try {
+        await updateDoc(doc(db, "households", householdId, "transactions", txId), patch);
+      } catch (updateError) {
+        const message =
+          updateError instanceof Error ? updateError.message : "Could not update transaction.";
+        setError(message);
+      }
+    },
+    [householdId],
+  );
+
+  const assignAccount = async (txId: string, nextAccountId: string) => {
+    if (!nextAccountId) {
+      await handleUpdateTransaction(txId, { accountId: "", accountLabel: "" });
+      return;
+    }
+    const account = accountById.get(nextAccountId);
+    if (!account) return;
+    await handleUpdateTransaction(txId, {
+      accountId: account.id,
+      accountLabel: `${account.bankName} ••${account.last4}`,
+      transferFrom: account.id,
+    });
+  };
+
+  const updateTransferType = async (
+    tx: Transaction,
+    nextType: "internal" | "external-own" | "external-third-party",
   ) => {
-    if (!householdId) return;
+    await handleUpdateTransaction(tx.id, {
+      transferType: nextType,
+      transferFrom: tx.accountId || tx.transferFrom || "",
+    });
+    setSuggestedTransferTypeByTxId((prev) => {
+      const next = { ...prev };
+      delete next[tx.id];
+      return next;
+    });
+  };
+
+  const convertTransferToExpense = async (tx: Transaction, nextCategory = "Personal") => {
+    await handleUpdateTransaction(tx.id, {
+      type: "expense",
+      category: nextCategory,
+      transferType: "",
+      transferTo: "",
+      transferFrom: "",
+      transferNote: "",
+    });
+    setSuggestedTransferTypeByTxId((prev) => {
+      const next = { ...prev };
+      delete next[tx.id];
+      return next;
+    });
+  };
+
+  const _bulkAssignAccount = async (nextAccountId: string) => {
+    if (!householdId || selectedIds.size === 0) return;
     try {
-      await updateDoc(doc(db, "households", householdId, "transactions", txId), patch);
-    } catch (updateError) {
+      const account = nextAccountId ? accountById.get(nextAccountId) : undefined;
+      const batch = writeBatch(db);
+      for (const txId of Array.from(selectedIds)) {
+        batch.update(doc(db, "households", householdId, "transactions", txId), {
+          accountId: account?.id ?? "",
+          accountLabel: account ? `${account.bankName} ••${account.last4}` : "",
+        });
+      }
+      await batch.commit();
+      setToastMessage("✅ Account assignment saved.");
+    } catch (bulkError) {
       const message =
-        updateError instanceof Error ? updateError.message : "Could not update transaction.";
+        bulkError instanceof Error ? bulkError.message : "Could not bulk assign account.";
+      setError(message);
+    }
+  };
+
+  const resetAccountForm = () => {
+    const firstMember = members[0];
+    const defaultOwner = firstMember?.uid || user?.uid || "joint";
+    const defaultOwnerName =
+      defaultOwner === "joint"
+        ? "Joint"
+        : memberNameByUid.get(defaultOwner) || firstMember?.firstName || user?.displayName || "Member";
+    setEditingAccount({
+      bankName: "",
+      nickname: "",
+      last4: "",
+      creditLimit: "",
+      type: "credit",
+      subtype: "",
+      owner: defaultOwner || "joint",
+      ownerName: defaultOwnerName,
+      color: "#C9A84C",
+    });
+  };
+
+  const _beginAddAccount = () => {
+    resetAccountForm();
+    setAccountFormOpen(true);
+  };
+
+  const _beginEditAccount = (account: (typeof accounts)[number]) => {
+    setEditingAccount({
+      id: account.id,
+      bankName: account.bankName,
+      nickname: account.nickname,
+      last4: account.last4,
+      creditLimit: account.creditLimit ? String(account.creditLimit) : "",
+      type: account.type,
+      subtype: account.subtype || "",
+      owner: account.owner,
+      ownerName: account.ownerName,
+      color: account.color || "#C9A84C",
+    });
+    setAccountFormOpen(true);
+  };
+
+  const _saveAccount = async () => {
+    if (!householdId || !editingAccount) return;
+    if (!editingAccount.nickname.trim()) {
+      setError("Please enter a nickname.");
+      setToastMessage("Please enter a nickname");
+      return;
+    }
+    if (!editingAccount.bankName.trim()) {
+      setError("Please enter a bank name.");
+      setToastMessage("Please enter a bank name");
+      return;
+    }
+
+    setSavingAccount(true);
+    const bankName = editingAccount.bankName.trim();
+    const nickname = editingAccount.nickname.trim();
+    const last4 = editingAccount.last4.replace(/\D/g, "").slice(0, 4);
+    const ownerName =
+      editingAccount.owner === "joint"
+        ? "Joint"
+        : memberNameByUid.get(editingAccount.owner) || editingAccount.ownerName || "Member";
+    const accountData = {
+      nickname,
+      bankName,
+      last4,
+      type: editingAccount.type,
+      subtype: editingAccount.subtype || "",
+      creditLimit:
+        editingAccount.type === "credit"
+          ? parseFloat(editingAccount.creditLimit || "0") || 0
+          : null,
+      owner: editingAccount.owner,
+      ownerName,
+      color: editingAccount.color || "#C9A84C",
+      householdId,
+      createdAt: serverTimestamp(),
+    };
+    console.log("householdId:", householdId);
+    console.log("saving account:", accountData);
+    try {
+      if (editingAccount.id) {
+        await updateDoc(
+          doc(db, "households", householdId, "accounts", editingAccount.id),
+          accountData,
+        );
+        setToastMessage(`✅ ${nickname} updated!`);
+      } else {
+        await addDoc(collection(db, "households", householdId, "accounts"), accountData);
+        setToastMessage(`✅ ${nickname} added!`);
+      }
+      resetAccountForm();
+      setAccountFormOpen(false);
+      setEditingAccount(null);
+    } catch (saveError) {
+      const message =
+        saveError instanceof Error ? saveError.message : "Could not save account.";
+      console.error("Save account error:", saveError);
+      setError(`Error saving account: ${message}`);
+      setToastMessage(`Error saving account: ${message}`);
+    } finally {
+      setSavingAccount(false);
+    }
+  };
+
+  const saveNewTransaction = async () => {
+    if (!householdId || !user) return;
+    const amount = Number.parseFloat(newTransactionForm.amount || "0");
+    if (!newTransactionForm.date || !newTransactionForm.desc.trim() || !(amount > 0)) {
+      setAddTransactionError("Date, merchant, and amount are required.");
+      setShakeAddTransaction(true);
+      window.setTimeout(() => setShakeAddTransaction(false), 350);
+      return;
+    }
+
+    try {
+      setSavingTransaction(true);
+      setAddTransactionError("");
+      const selectedAccount = newTransactionForm.accountId
+        ? accountById.get(newTransactionForm.accountId)
+        : undefined;
+      const selectedMember = members.find((m) => m.uid === newTransactionForm.assignedTo);
+      const assignedTo = newTransactionForm.assignedTo || user.uid;
+      const assignedToName =
+        assignedTo === "joint"
+          ? "Joint"
+          : selectedMember?.firstName ||
+            memberNameByUid.get(assignedTo)?.split(" ")[0] ||
+            user.displayName?.split(" ")[0] ||
+            "Member";
+
+      const shouldShowCategory =
+        newTransactionForm.type !== "transfer" ||
+        newTransactionForm.transferType === "external-third-party";
+      const payload = {
+        date: newTransactionForm.date,
+        desc: newTransactionForm.desc.trim(),
+        merchantName: newTransactionForm.desc.trim(),
+        month: newTransactionForm.date.slice(0, 7),
+        amount,
+        type: newTransactionForm.type,
+        direction: (newTransactionForm.type === "income" || newTransactionForm.type === "refund")
+          ? "credit" : "debit",
+        transferType:
+          newTransactionForm.type === "transfer"
+            ? newTransactionForm.transferType || null
+            : null,
+        category: shouldShowCategory ? newTransactionForm.category || null : null,
+        subcat: shouldShowCategory ? newTransactionForm.subcat || null : null,
+        accountId: selectedAccount?.id || null,
+        accountLabel: selectedAccount
+          ? `${selectedAccount.bankName} ••${selectedAccount.last4}`
+          : null,
+        assignedTo,
+        assignedToName,
+        comment: newTransactionForm.comment.trim() || null,
+        reviewed: false,
+        flagged: false,
+        addedManually: true,
+        createdAt: serverTimestamp(),
+      };
+
+      await addDoc(collection(db, "households", householdId, "transactions"), payload);
+      setToastMessage(
+        `✅ ${newTransactionForm.desc.trim()} — ${formatMoney(amount)} added`,
+      );
+      setShowAddTransactionModal(false);
+      resetNewTransactionForm();
+    } catch (saveError) {
+      const message =
+        saveError instanceof Error ? saveError.message : "Could not save transaction.";
+      setAddTransactionError(`Error saving transaction: ${message}`);
+      setToastMessage(`Error saving transaction: ${message}`);
+    } finally {
+      setSavingTransaction(false);
+    }
+  };
+
+  const _deleteAccountAndUnlink = async (account: (typeof accounts)[number]) => {
+    if (!householdId) return;
+    const confirmed = window.confirm(
+      `Delete ${account.nickname}? Transactions assigned to this account will keep their data but lose the account link.`,
+    );
+    if (!confirmed) return;
+    try {
+      await deleteDoc(doc(db, "households", householdId, "accounts", account.id));
+      const linkedTx = await getDocs(
+        query(
+          collection(db, "households", householdId, "transactions"),
+          where("accountId", "==", account.id),
+        ),
+      );
+      if (!linkedTx.empty) {
+        const batch = writeBatch(db);
+        linkedTx.docs.forEach((txDoc) => {
+          batch.update(txDoc.ref, { accountId: "", accountLabel: "" });
+        });
+        await batch.commit();
+      }
+      setToastMessage("✅ Account deleted");
+    } catch (deleteError) {
+      const message =
+        deleteError instanceof Error ? deleteError.message : "Could not delete account.";
       setError(message);
     }
   };
@@ -410,7 +1608,7 @@ export default function OnboardingReviewPage() {
     reviewedReason: reason,
   });
 
-  const handleSubcategorySelect = async (tx: Transaction, selectedValue: string) => {
+  const _handleSubcategorySelect = async (tx: Transaction, selectedValue: string) => {
     if (selectedValue === "__add_new__") {
       setAddingSubcatForTx((prev) => ({ ...prev, [tx.id]: true }));
       setNewSubcatDrafts((prev) => ({
@@ -480,7 +1678,7 @@ export default function OnboardingReviewPage() {
     }
   };
 
-  const toggleAll = () => {
+  const _toggleAll = () => {
     if (selectedIds.size === sortedTransactions.length) {
       setSelectedIds(new Set());
       return;
@@ -488,7 +1686,7 @@ export default function OnboardingReviewPage() {
     setSelectedIds(new Set(sortedTransactions.map((tx) => tx.id)));
   };
 
-  const toggleOne = (id: string) => {
+  const _toggleOne = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -513,7 +1711,7 @@ export default function OnboardingReviewPage() {
     }
   };
 
-  const deleteSelected = async () => {
+  const _deleteSelected = async () => {
     if (!householdId || selectedIds.size === 0) return;
     try {
       await Promise.all(
@@ -567,16 +1765,16 @@ export default function OnboardingReviewPage() {
     }
   };
 
-  const startAiAnalysis = async () => {
+  const _startAiAnalysis = async () => {
     if (!user) return;
 
     try {
       setStartingAnalysis(true);
       setError("");
       await updateDoc(doc(db, "users", user.uid), {
-        onboardingStep: "analyzing",
+        onboardingStep: "questions",
       });
-      router.push("/onboarding/analyzing");
+      router.push("/onboarding/questions");
     } catch (startError) {
       const message =
         startError instanceof Error ? startError.message : "Could not start AI analysis.";
@@ -586,44 +1784,28 @@ export default function OnboardingReviewPage() {
     }
   };
 
-  // FIX 8 — drive state from realtime document statuses.
-  const allDone =
-    documents.length > 0 &&
-    documents.every((d) => d.status === "complete" || d.status === "error");
-  const isParsing = documents.some((d) => d.status === "parsing" || d.status === "uploaded");
-  const erroredDocs = documents.filter((d) => d.status === "error");
-
-  const retryDocument = async (docItem: (typeof documents)[number]) => {
-    if (!householdId) return;
-
+  const continueToDashboard = async () => {
+    if (!user) return;
     try {
-      await updateDoc(doc(db, "households", householdId, "documents", docItem.id), {
-        status: "uploaded",
-        error: null,
-      });
-      const response = await fetch("/api/parse-document", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          storagePath: docItem.storagePath,
-          householdId,
-          docId: docItem.id,
-          fileName: docItem.fileName,
-        }),
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Parse failed: ${response.status} ${text.slice(0, 100)}`);
+      setContinuing(true);
+      const alreadyPastReview =
+        userOnboardingStep === "questions" ||
+        userOnboardingStep === "analyzing" ||
+        userOnboardingStep === "complete";
+      if (!alreadyPastReview) {
+        await updateDoc(doc(db, "users", user.uid), { onboardingStep: "questions" });
       }
-    } catch (retryError) {
+      router.push("/dashboard");
+    } catch (continueError) {
       const message =
-        retryError instanceof Error ? retryError.message : "Could not retry parsing document.";
+        continueError instanceof Error ? continueError.message : "Could not continue.";
       setError(message);
+    } finally {
+      setContinuing(false);
     }
   };
 
-  const handleSort = (key: SortKey) => {
+  const _handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
       return;
@@ -632,8 +1814,262 @@ export default function OnboardingReviewPage() {
     setSortDir("asc");
   };
 
-  const sortIndicator = (key: SortKey) =>
+  const _sortIndicator = (key: SortKey) =>
     sortKey === key ? (sortDir === "asc" ? "↑" : "↓") : "↕";
+
+  const selectedTx = useMemo(
+    () => transactions.find((tx) => tx.id === selectedTxId) ?? null,
+    [transactions, selectedTxId],
+  );
+
+  const renderTransferDetails = (tx: Transaction, compact = false) => {
+    if (tx.type !== "transfer") return null;
+
+    const fromAcc = tx.transferFromAccountId
+      ? accountById.get(tx.transferFromAccountId)
+      : tx.accountId
+        ? accountById.get(tx.accountId)
+        : undefined;
+
+    const toAcc = tx.transferToAccountId
+      ? accountById.get(tx.transferToAccountId)
+      : undefined;
+
+    const isLinked = Boolean(tx.transferPairId);
+
+    // ── LINKED PAIR — clean diagram + collapsible reclassify ──────
+    if (isLinked) {
+      return (
+        <div className={`space-y-2 rounded-xl border border-blue-100 bg-blue-50 p-3 ${compact ? "" : "mt-2"}`}>
+          {/* FROM → TO diagram */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className="rounded-full px-2.5 py-1 text-[11px] font-bold text-white"
+              style={{ backgroundColor: fromAcc?.color ?? "#9AA5B4" }}
+            >
+              {fromAcc?.nickname ?? "Unknown"}
+            </span>
+            <svg width="20" height="10" viewBox="0 0 20 10" className="shrink-0">
+              <path
+                d="M0 5 L14 5 M10 1 L18 5 L10 9"
+                stroke="#93C5FD"
+                strokeWidth="1.5"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <span
+              className="rounded-full px-2.5 py-1 text-[11px] font-bold text-white"
+              style={{ backgroundColor: toAcc?.color ?? "#9AA5B4" }}
+            >
+              {toAcc?.nickname ?? "Unknown"}
+            </span>
+            <span className="ml-auto text-xs font-bold text-blue-700">${tx.amount.toFixed(2)}</span>
+          </div>
+
+          <p className="text-[10px] text-blue-400">
+            {tx.direction === "debit" ? "Sending side" : "Receiving side"}
+            {" · "}
+            {(tx.transferType as string) === "card-payment"
+              ? "Card payment"
+              : tx.transferType === "internal"
+                ? "Internal transfer"
+                : tx.transferType === "external-own"
+                  ? "Own bank transfer"
+                  : "Transfer"}
+          </p>
+
+          {/* Collapsible reclassify section */}
+          <details className="group">
+            <summary className="cursor-pointer list-none text-[11px] font-semibold text-blue-500 hover:text-blue-700">
+              <span className="group-open:hidden">⚙ Reclassify →</span>
+              <span className="hidden group-open:inline">⚙ Reclassify ↑</span>
+            </summary>
+
+            <div className="mt-2 space-y-2 rounded-lg border border-blue-100 bg-white p-2">
+              {/* Transfer type buttons */}
+              <div className="flex flex-wrap gap-2">
+                {([
+                  ["internal", "🏠 Internal", "Between your own accounts"],
+                  ["external-own", "🏦 My Other Bank", "Your account at another bank"],
+                  ["external-third-party", "👤 Third Party", "To another person or business"],
+                ] as const).map(([value, label, description]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => void updateTransferType(tx, value)}
+                    className={`rounded-lg border px-2 py-1 text-left ${
+                      tx.transferType === value
+                        ? value === "internal"
+                          ? "border-transparent bg-[#1B2A4A] text-white"
+                          : value === "external-own"
+                            ? "border-transparent bg-[#3B82F6] text-white"
+                            : "border-transparent bg-[#F97316] text-white"
+                        : "border-[#E4E8F0] bg-white text-[#1B2A4A]"
+                    }`}
+                  >
+                    <div className="text-xs font-semibold">{label}</div>
+                    <div className="text-[10px] opacity-70">{description}</div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Convert to expense */}
+              <div className="rounded-md border border-[#F97316]/30 bg-orange-50 p-2 text-[11px] text-[#F97316]">
+                This looks wrong? Convert to an expense instead:
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {[
+                    ["Giving", "💝 Giving"],
+                    ["Housing", "🏠 Rent"],
+                    ["Personal", "👤 Personal"],
+                    ["Debt", "💳 Debt"],
+                  ].map(([category, label]) => (
+                    <button
+                      key={category}
+                      type="button"
+                      onClick={() => void convertTransferToExpense(tx, category)}
+                      className="rounded-full border border-[#F97316]/30 bg-white px-2 py-0.5 text-[10px] font-semibold text-[#1B2A4A]"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      );
+    }
+
+    // ── UNLINKED TRANSFER — full classification UI ─────────────────
+    const suggestion = suggestedTransferTypeByTxId[tx.id];
+
+    return (
+      <div className={`space-y-2 rounded-lg border border-[#E4E8F0] bg-white p-2 ${compact ? "" : "mt-2"}`}>
+        {/* Suggestion hint */}
+        {suggestion && (
+          <div
+            className={`rounded-md px-2 py-1 text-[11px] ${
+              suggestion === "internal"
+                ? "border border-[#C9A84C]/40 bg-[#FFF8E8] text-[#1B2A4A]"
+                : "border border-[#F97316]/40 bg-orange-50 text-[#F97316]"
+            }`}
+          >
+            {suggestion === "internal"
+              ? "💡 Detected as internal transfer"
+              : "⚠️ May be an expense — review carefully"}
+          </div>
+        )}
+
+        {/* Transfer type buttons */}
+        <div className="flex flex-wrap gap-2">
+          {([
+            ["internal", "🏠 Internal", "Between your own accounts", "bg-[#1B2A4A]"],
+            ["external-own", "🏦 My Other Bank", "Your account at another bank", "bg-[#3B82F6]"],
+            ["external-third-party", "👤 Third Party", "To another person or business", "bg-[#F97316]"],
+          ] as const).map(([value, label, description, activeBg]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => void updateTransferType(tx, value)}
+              className={`rounded-lg border px-2 py-1 text-left ${
+                tx.transferType === value
+                  ? `${activeBg} border-transparent text-white`
+                  : "border-[#E4E8F0] bg-white text-[#1B2A4A]"
+              }`}
+            >
+              <div className="text-xs font-semibold">{label}</div>
+              <div className="text-[10px] opacity-80">{description}</div>
+            </button>
+          ))}
+        </div>
+
+        {/* Third party warning + convert */}
+        {tx.transferType === "external-third-party" && (
+          <div className="rounded-md border border-[#F97316]/40 bg-orange-50 p-2 text-[11px] text-[#F97316]">
+            ⚠️ This might be an expense. Convert?
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {[
+                ["Giving", "💝 Giving"],
+                ["Housing", "🏠 Rent/Housing"],
+                ["Personal", "👤 Personal"],
+                ["Debt", "💳 Debt Payment"],
+              ].map(([category, label]) => (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => void convertTransferToExpense(tx, category)}
+                  className="rounded-full border border-[#E4E8F0] bg-white px-2 py-0.5 text-[10px] font-semibold text-[#1B2A4A]"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Internal: select destination account */}
+        {tx.transferType === "internal" && (
+          <select
+            value={tx.transferTo || ""}
+            onChange={(e) =>
+              void handleUpdateTransaction(tx.id, {
+                transferTo: e.target.value,
+                transferFrom: tx.accountId || tx.transferFrom || "",
+              })
+            }
+            className="h-9 w-full rounded-lg border border-[#E4E8F0] bg-white px-2 text-xs focus:border-[#C9A84C] focus:outline-none"
+          >
+            <option value="">Select destination account</option>
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.nickname} · {account.bankName} ••{account.last4}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {/* External-own: free text destination */}
+        {tx.transferType === "external-own" && (
+          <input
+            value={tx.transferTo}
+            onChange={(e) =>
+              void handleUpdateTransaction(tx.id, {
+                transferTo: e.target.value,
+                transferFrom: tx.accountId || tx.transferFrom || "",
+              })
+            }
+            placeholder="e.g. Wells Fargo ••8834, TD Bank account"
+            className="h-9 w-full rounded-lg border border-[#E4E8F0] bg-white px-2 text-xs focus:border-[#C9A84C] focus:outline-none"
+          />
+        )}
+
+        {/* External-third-party: recipient name */}
+        {tx.transferType === "external-third-party" && (
+          <input
+            value={tx.transferTo}
+            onChange={(e) =>
+              void handleUpdateTransaction(tx.id, {
+                transferTo: e.target.value,
+                transferFrom: tx.accountId || tx.transferFrom || "",
+              })
+            }
+            placeholder="e.g. John Smith, Landlord, Ivan Merchan"
+            className="h-9 w-full rounded-lg border border-[#E4E8F0] bg-white px-2 text-xs focus:border-[#C9A84C] focus:outline-none"
+          />
+        )}
+
+        {/* Transfer note */}
+        <input
+          value={tx.transferNote}
+          onChange={(e) => void handleUpdateTransaction(tx.id, { transferNote: e.target.value })}
+          placeholder="Optional note (e.g. Monthly rent, Emergency fund)"
+          className="h-9 w-full rounded-lg border border-[#E4E8F0] bg-white px-2 text-xs focus:border-[#C9A84C] focus:outline-none"
+        />
+      </div>
+    );
+  };
 
   useEffect(() => {
     if (!toastMessage) return;
@@ -641,753 +2077,948 @@ export default function OnboardingReviewPage() {
     return () => window.clearTimeout(timer);
   }, [toastMessage]);
 
+  useEffect(() => {
+    if (!selectedTxId) return;
+    if (!transactions.some((tx) => tx.id === selectedTxId)) {
+      setSelectedTxId("");
+      setShowDetailPanel(false);
+    }
+  }, [selectedTxId, transactions]);
+
+  // Keyboard shortcuts for review
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't fire when typing in an input/textarea/select
+      const tag = (e.target as HTMLElement).tagName;
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return;
+
+      const currentIdx = selectedTxId
+        ? sortedTransactions.findIndex((t) => t.id === selectedTxId)
+        : -1;
+
+      if (e.key === "ArrowDown" || e.key === "j") {
+        e.preventDefault();
+        const next = sortedTransactions[currentIdx + 1];
+        if (next) {
+          setSelectedTxId(next.id);
+          setShowDetailPanel(true);
+        }
+      }
+      if (e.key === "ArrowUp" || e.key === "k") {
+        e.preventDefault();
+        const prev = sortedTransactions[currentIdx - 1];
+        if (prev) {
+          setSelectedTxId(prev.id);
+          setShowDetailPanel(true);
+        }
+      }
+      if ((e.key === " " || e.key === "Enter") && selectedTxId) {
+        e.preventDefault();
+        const tx = transactions.find((t) => t.id === selectedTxId);
+        if (tx && !tx.flagged) {
+          void handleUpdateTransaction(selectedTxId, {
+            reviewed: !tx.reviewed,
+            reviewedBy: user?.uid ?? "",
+            reviewedAt: serverTimestamp(),
+            reviewedReason: "skip",
+          });
+          // Auto-advance to next
+          const next = sortedTransactions[currentIdx + 1];
+          if (next) setSelectedTxId(next.id);
+        }
+      }
+      if (e.key === "f" && selectedTxId) {
+        const tx = transactions.find((t) => t.id === selectedTxId);
+        if (tx) {
+          void handleUpdateTransaction(selectedTxId, {
+            flagged: !tx.flagged,
+            flagReason: tx.flagged ? "" : "Needs review",
+          });
+        }
+      }
+      if (e.key === "Escape") {
+        setShowDetailPanel(false);
+        setSelectedTxId("");
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedTxId, sortedTransactions, transactions, user, handleUpdateTransaction]);
+
+  // Queue = unreviewed OR flagged
+  const queueTransactions = useMemo(
+    () => sortedTransactions.filter((tx) => !tx.reviewed || tx.flagged),
+    [sortedTransactions],
+  );
+  // When quickFilter explicitly requests reviewed/flagged/all,
+  // override queue mode and show from the full sorted list
+  const displayTransactions = useMemo(() => {
+    if (quickFilter === "reviewed" || quickFilter === "flagged") {
+      return sortedTransactions; // filteredTransactions already handles the filter
+    }
+    return focusMode === "queue" ? queueTransactions : sortedTransactions;
+  }, [focusMode, quickFilter, queueTransactions, sortedTransactions]);
+
   if (authLoading || loadingContext) {
     return (
-      <div className="min-h-screen bg-white px-4 py-8 text-[#1B2A4A] md:px-6 lg:px-8">
-        <div className="mx-auto w-full max-w-6xl">Loading...</div>
+      <div className="flex min-h-screen items-center justify-center bg-[#F4F6FA]">
+        <div className="text-sm text-[#1B2A4A]/40">Loading...</div>
       </div>
     );
   }
-
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-white px-4 py-8 text-[#1B2A4A] md:bg-[#F4F6FA] md:px-6 lg:px-8">
-      <div className="mx-auto w-full max-w-6xl space-y-5">
-        <section className="rounded-2xl bg-white p-5 shadow-md ring-1 ring-[#1B2A4A]/10 md:p-6">
-          <h1 className="text-3xl font-bold md:text-4xl">Review & Edit Transactions</h1>
-          <p className="mt-2 text-sm text-[#1B2A4A]/75 md:text-base">
-            Confirm parsed transactions before starting AI analysis.
-          </p>
-        </section>
-
-        {error ? <p className="text-sm font-medium text-red-600">{error}</p> : null}
-        {toastMessage ? (
-          <div className="rounded-lg border border-[#C9A84C] bg-[#FFF8E8] px-3 py-2 text-sm font-medium text-[#1B2A4A]">
-            {toastMessage}
-          </div>
-        ) : null}
-
-        {isParsing ? (
-          <section className="rounded-2xl bg-white p-5 shadow-md ring-1 ring-[#1B2A4A]/10">
-            <h2 className="text-lg font-semibold">Parsing your documents...</h2>
-            <ul className="mt-3 space-y-2 text-sm">
-              {documents.map((docItem) => (
-                <li key={docItem.id} className="rounded-lg bg-[#F4F6FA] p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <span>
-                      {docItem.status === "complete"
-                        ? "✅"
-                        : docItem.status === "parsing"
-                          ? "🔄"
-                          : docItem.status === "uploaded"
-                            ? "⏳"
-                            : docItem.status === "error"
-                              ? "❌"
-                              : "•"}{" "}
-                      {docItem.fileName} —{" "}
-                      <span className="font-medium">
-                        {docItem.status === "complete"
-                          ? `complete (${docItem.transactionCount || 0} transactions)`
-                          : docItem.status === "parsing"
-                            ? "parsing..."
-                            : docItem.status === "uploaded"
-                              ? "waiting..."
-                              : docItem.status === "error"
-                                ? "error"
-                                : docItem.status}
-                      </span>
-                    </span>
-                    {docItem.status === "error" ? (
-                      <button
-                        type="button"
-                        onClick={() => void retryDocument(docItem)}
-                        className="rounded-lg border border-red-300 px-3 py-1 text-xs font-semibold text-red-600"
-                      >
-                        Retry
-                      </button>
-                    ) : null}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
-        {allDone ? (
-          <section className="rounded-2xl bg-white p-5 shadow-md ring-1 ring-[#1B2A4A]/10">
-            <p className="text-sm font-medium text-[#1B2A4A]/75">
-              All documents parsed. Review your transactions below.
-            </p>
-            {erroredDocs.length > 0 ? (
-              <ul className="mt-3 space-y-2 text-sm">
-                {erroredDocs.map((docItem) => (
-                  <li
-                    key={docItem.id}
-                    className="flex items-center justify-between gap-3 rounded-lg bg-[#F4F6FA] p-3"
-                  >
-                    <span>
-                      ❌ {docItem.fileName} — error
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => void retryDocument(docItem)}
-                      className="rounded-lg border border-red-300 px-3 py-1 text-xs font-semibold text-red-600"
-                    >
-                      Retry
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </section>
-        ) : null}
-
-        {allDone ? (
-          <section className="space-y-3 rounded-2xl bg-white p-5 shadow-md ring-1 ring-[#1B2A4A]/10 md:p-6">
-          <div className="flex items-center justify-end">
-            <Link
-              href="/settings/categories"
-              className="text-xs font-semibold text-[#1B2A4A]/80 underline underline-offset-2"
-            >
-              Manage categories →
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
-            <select
-              value={docFilter}
-              onChange={(event) => setDocFilter(event.target.value)}
-              className="h-10 rounded-lg border border-[#1B2A4A]/15 bg-[#F4F6FA] px-2 text-sm"
-            >
-              <option value="all">All documents</option>
-              {documents.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.fileName || d.id}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={spouseFilter}
-              onChange={(event) => setSpouseFilter(event.target.value)}
-              className="h-10 rounded-lg border border-[#1B2A4A]/15 bg-[#F4F6FA] px-2 text-sm"
-            >
-              <option value="all">All spouses</option>
-              {members.map((member) => (
-                <option key={member.uid} value={member.uid}>
-                  {memberNameByUid.get(member.uid)}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={categoryFilter}
-              onChange={(event) => setCategoryFilter(event.target.value)}
-              className="h-10 rounded-lg border border-[#1B2A4A]/15 bg-[#F4F6FA] px-2 text-sm"
-            >
-              <option value="all">All categories</option>
-              {CATEGORIES.map((category) => (
-                <option key={category.name} value={category.name}>
-                  {category.emoji} {category.name}
-                </option>
-              ))}
-            </select>
-
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search merchant"
-              className="h-10 rounded-lg border border-[#1B2A4A]/15 bg-[#F4F6FA] px-2 text-sm"
-            />
-
-            <select
-              value={flaggedFilter}
-              onChange={(event) => setFlaggedFilter(event.target.value)}
-              className="h-10 rounded-lg border border-[#1B2A4A]/15 bg-[#F4F6FA] px-2 text-sm"
-            >
-              <option value="all">Show all rows</option>
-              <option value="flagged">Show flagged only</option>
-            </select>
-
-            <select
-              value={typeFilter}
-              onChange={(event) => setTypeFilter(event.target.value)}
-              className="h-10 rounded-lg border border-[#1B2A4A]/15 bg-[#F4F6FA] px-2 text-sm"
-            >
-              <option value="all">All types</option>
-              <option value="income">Income</option>
-              <option value="expense">Expense</option>
-              <option value="transfer">Transfer</option>
-              <option value="refund">Refund</option>
-            </select>
-
-            <select
-              value={reviewedFilter}
-              onChange={(event) => setReviewedFilter(event.target.value)}
-              className="h-10 rounded-lg border border-[#1B2A4A]/15 bg-[#F4F6FA] px-2 text-sm"
-            >
-              <option value="unreviewed">Hide reviewed</option>
-              <option value="reviewed">Show reviewed only</option>
-              <option value="all">Show all review states</option>
-            </select>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 text-sm">
-            <span>Total transactions: {sortedTransactions.length}</span>
-            <span className="text-green-700">Total Income: {formatMoney(totalIncome)}</span>
-            <span className="text-red-600">Total Expenses: {formatMoney(totalExpenses)}</span>
-            <span className={netAmount >= 0 ? "text-green-700" : "text-red-600"}>
-              Net: {netAmount >= 0 ? "+" : "-"}
-              {formatMoney(Math.abs(netAmount))}
+    <div className="flex h-screen flex-col overflow-hidden bg-[#F4F6FA] text-[#1B2A4A]">
+      <header className="flex shrink-0 items-center gap-4 border-b border-[#E4E8F0] bg-white px-5 py-3">
+        <div className="flex items-center gap-3">
+          <h1 className="text-base font-bold text-[#1B2A4A]">Review Transactions</h1>
+          <span className="rounded-full bg-[#FFF8E8] px-3 py-0.5 text-xs font-semibold text-[#C9A84C]">
+            {reviewedReviewableCount}/{totalReviewableCount} done
+          </span>
+          {flaggedCount > 0 && (
+            <span className="rounded-full bg-amber-100 px-3 py-0.5 text-xs font-semibold text-amber-700">
+              ⚠️ {flaggedCount} flagged
             </span>
-            <span>Date range: {dateRange}</span>
-            <span>
-              {reviewedReviewableCount} of {totalReviewableCount} reviewed
-            </span>
-            <span className="rounded-full bg-yellow-100 px-2 py-1 text-yellow-800">
-              {flaggedCount} flagged for review
-            </span>
-          </div>
-          <div className="h-2 w-full rounded-full bg-[#F4F6FA]">
-            <div
-              className="h-2 rounded-full bg-[#C9A84C] transition-all"
-              style={{ width: `${reviewedProgressPercent}%` }}
-            />
-          </div>
+          )}
+        </div>
 
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={
-                sortedTransactions.length > 0 && selectedIds.size === sortedTransactions.length
-              }
-              onChange={toggleAll}
-            />
-            <span className="text-sm">Select all</span>
-            <button
-              type="button"
-              onClick={deleteSelected}
-              disabled={selectedIds.size === 0}
-              className="rounded-lg border border-red-300 px-3 py-1 text-xs font-semibold text-red-600 disabled:opacity-50"
-            >
-              Delete selected
-            </button>
-            <button
-              type="button"
-              onClick={() => void markAllAsReviewed()}
-              disabled={markingAllReviewed || pendingReviewableCount === 0}
-              className="rounded-lg border border-[#C9A84C] px-3 py-1 text-xs font-semibold text-[#1B2A4A] disabled:opacity-50"
-            >
-              {markingAllReviewed ? "Marking..." : "✓ Mark All as Reviewed"}
-            </button>
-          </div>
+        <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#F4F6FA]">
+          <div
+            className="h-2 rounded-full bg-[#C9A84C] transition-all duration-500"
+            style={{ width: `${reviewedProgressPercent}%` }}
+          />
+        </div>
 
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[1100px]">
-              <thead>
-                <tr className="text-left text-xs text-[#1B2A4A]/70">
-                  <th className="py-2">Sel</th>
-                  <th>
-                    <button type="button" onClick={() => handleSort("date")} className="font-semibold">
-                      Date {sortIndicator("date")}
-                    </button>
-                  </th>
-                  <th>
-                    <button type="button" onClick={() => handleSort("desc")} className="font-semibold">
-                      Merchant {sortIndicator("desc")}
-                    </button>
-                  </th>
-                  <th>
-                    <button type="button" onClick={() => handleSort("amount")} className="font-semibold">
-                      Amount {sortIndicator("amount")}
-                    </button>
-                  </th>
-                  <th>Type</th>
-                  <th>
-                    <button
-                      type="button"
-                      onClick={() => handleSort("category")}
-                      className="font-semibold"
-                    >
-                      Category {sortIndicator("category")}
-                    </button>
-                  </th>
-                  <th>
-                    <button
-                      type="button"
-                      onClick={() => handleSort("assignedToName")}
-                      className="font-semibold"
-                    >
-                      Assigned To {sortIndicator("assignedToName")}
-                    </button>
-                  </th>
-                  <th>Comment</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedTransactions.map((tx, index) => (
-                  <tr
-                    key={tx.id}
-                    className={
-                      tx.reviewed
-                        ? "bg-green-50"
-                        : tx.flagged
-                          ? "bg-yellow-50"
-                          : index % 2
-                            ? "bg-[#F9FAFC]"
-                            : "bg-white"
-                    }
-                  >
-                    <td className="py-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(tx.id)}
-                        onChange={() => toggleOne(tx.id)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        value={tx.date}
-                        onChange={(event) =>
-                          void handleUpdateTransaction(tx.id, { date: event.target.value })
-                        }
-                        className="h-9 w-28 rounded border border-transparent bg-transparent px-2 text-sm hover:border-[#C9A84C] focus:border-[#C9A84C]"
-                      />
-                    </td>
-                    <td>
-                      <div className="space-y-1">
-                        <input
-                          value={tx.desc}
-                          onChange={(event) =>
-                            void handleUpdateTransaction(tx.id, { desc: event.target.value })
-                          }
-                          className="h-9 w-52 rounded border border-transparent bg-transparent px-2 text-sm hover:border-[#C9A84C] focus:border-[#C9A84C]"
-                        />
-                        {tx.flagged && !tx.reviewed ? (
-                          <div className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-[11px] font-medium text-yellow-800">
-                            <span>⚠️</span>
-                            <span>{tx.flagReason || "Possible duplicate — please verify"}</span>
-                          </div>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td>
-                      <div className="space-y-1">
-                        <div className={`text-xs font-semibold ${getAmountColor(tx)}`}>
-                          {getSignedAmount(tx)}
-                        </div>
-                        <input
-                          type="number"
-                          value={tx.amount}
-                          onChange={(event) =>
-                            void handleUpdateTransaction(tx.id, {
-                              amount: Math.abs(Number(event.target.value)),
-                            })
-                          }
-                          className="h-9 w-28 rounded border border-transparent bg-transparent px-2 text-sm hover:border-[#C9A84C] focus:border-[#C9A84C]"
-                        />
-                      </div>
-                    </td>
-                    <td>
-                      <select
-                        value={tx.type}
-                        onChange={(event) =>
-                          void handleUpdateTransaction(tx.id, {
-                            type: event.target.value as TransactionType,
-                          })
-                        }
-                        className={`h-8 w-28 rounded-full px-2 text-xs font-semibold ${getTypePillClasses(
-                          tx.type,
-                        )}`}
-                      >
-                        <option value="expense">Expense</option>
-                        <option value="income">Income</option>
-                        <option value="transfer">Transfer</option>
-                        <option value="refund">Refund</option>
-                      </select>
-                    </td>
-                    <td>
-                      <div className="space-y-1">
-                        <div className="text-xs font-medium text-[#1B2A4A]/70">
-                          {tx.subcat
-                            ? `${getCategoryEmoji(tx.category)} ${tx.category} › ${tx.subcat}`
-                            : `${getCategoryEmoji(tx.category)} ${tx.category}`}
-                        </div>
-                        <select
-                          value={tx.category}
-                          onChange={(event) =>
-                            void handleUpdateTransaction(tx.id, {
-                              category: event.target.value,
-                              subcat: "",
-                              type: getDefaultType(event.target.value),
-                              reviewed: false,
-                              reviewedBy: "",
-                              reviewedAt: null,
-                              reviewedReason: "",
-                            })
-                          }
-                          className="h-9 w-40 rounded border border-transparent bg-transparent px-2 text-sm hover:border-[#C9A84C] focus:border-[#C9A84C]"
-                        >
-                          {CATEGORIES.map((category) => (
-                            <option key={category.name} value={category.name}>
-                              {category.emoji} {category.name}
-                            </option>
-                          ))}
-                        </select>
-                        {(subcatsByParent[tx.category] ?? []).length > 0 ? (
-                          <select
-                            value={tx.subcat || ""}
-                            onChange={(event) =>
-                              void handleSubcategorySelect(tx, event.target.value)
-                            }
-                            className="h-9 w-40 rounded border border-transparent bg-transparent px-2 text-xs hover:border-[#C9A84C] focus:border-[#C9A84C]"
-                          >
-                            <option value="">No subcategory</option>
-                            {(subcatsByParent[tx.category] ?? []).map((subcat) => (
-                              <option key={subcat.id} value={subcat.name}>
-                                {subcat.name}
-                              </option>
-                            ))}
-                            <option value="__add_new__">➕ Add new</option>
-                          </select>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAddingSubcatForTx((prev) => ({ ...prev, [tx.id]: true }));
-                              setNewSubcatDrafts((prev) => ({
-                                ...prev,
-                                [tx.id]: prev[tx.id] ?? { name: "", parentCategory: tx.category },
-                              }));
-                            }}
-                            className="text-xs font-semibold text-[#C9A84C]"
-                          >
-                            + Add subcategory
-                          </button>
-                        )}
-                        {addingSubcatForTx[tx.id] ? (
-                          <div className="flex items-center gap-1">
-                            <input
-                              value={newSubcatDrafts[tx.id]?.name ?? ""}
-                              onChange={(event) =>
-                                setNewSubcatDrafts((prev) => ({
-                                  ...prev,
-                                  [tx.id]: {
-                                    name: event.target.value,
-                                    parentCategory: prev[tx.id]?.parentCategory || tx.category,
-                                  },
-                                }))
-                              }
-                              placeholder="New subcategory"
-                              className="h-8 w-24 rounded border border-[#1B2A4A]/20 bg-white px-2 text-xs"
-                            />
-                            <select
-                              value={newSubcatDrafts[tx.id]?.parentCategory ?? tx.category}
-                              onChange={(event) =>
-                                setNewSubcatDrafts((prev) => ({
-                                  ...prev,
-                                  [tx.id]: {
-                                    name: prev[tx.id]?.name ?? "",
-                                    parentCategory: event.target.value,
-                                  },
-                                }))
-                              }
-                              className="h-8 w-24 rounded border border-[#1B2A4A]/20 bg-white px-1 text-xs"
-                            >
-                              {CATEGORIES.map((category) => (
-                                <option key={category.name} value={category.name}>
-                                  {category.emoji} {category.name}
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              type="button"
-                              onClick={() => void handleSaveNewSubcategory(tx)}
-                              className="h-8 rounded bg-[#C9A84C] px-2 text-xs font-semibold text-[#1B2A4A]"
-                            >
-                              Save
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td>
-                      <select
-                        value={tx.assignedTo}
-                        onChange={(event) =>
-                          void handleUpdateTransaction(tx.id, {
-                            assignedTo: event.target.value,
-                            assignedToName: memberNameByUid.get(event.target.value) || "Unknown",
-                          })
-                        }
-                        className="h-9 w-40 rounded border border-transparent bg-transparent px-2 text-sm hover:border-[#C9A84C] focus:border-[#C9A84C]"
-                      >
-                        {members.map((member) => (
-                          <option key={member.uid} value={member.uid}>
-                            {memberNameByUid.get(member.uid)}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <input
-                        value={tx.comment}
-                        onChange={(event) =>
-                          void handleUpdateTransaction(tx.id, {
-                            comment: event.target.value,
-                            commentBy: user.uid,
-                          })
-                        }
-                        className="h-9 w-48 rounded border border-transparent bg-transparent px-2 text-sm hover:border-[#C9A84C] focus:border-[#C9A84C]"
-                      />
-                    </td>
-                    <td>
-                      <div className="flex items-center gap-3">
-                        <label className="flex items-center gap-1 text-xs">
-                          <input
-                            type="checkbox"
-                            checked={tx.reviewed}
-                            onChange={(event) =>
-                              void handleUpdateTransaction(tx.id, {
-                                reviewed: event.target.checked,
-                                reviewedBy: event.target.checked ? user.uid : "",
-                                reviewedAt: event.target.checked ? serverTimestamp() : null,
-                                reviewedReason: event.target.checked ? "skip" : "",
-                              })
-                            }
-                          />
-                          Reviewed
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => void deleteOne(tx.id)}
-                          className="text-xs font-semibold text-red-600 underline underline-offset-2"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="space-y-3 md:hidden">
-            {sortedTransactions.map((tx) => (
-              <article
-                key={tx.id}
-                className={
-                  tx.reviewed
-                    ? "rounded-xl border border-green-200 bg-green-50 p-3"
-                    : tx.flagged
-                      ? "rounded-xl border border-yellow-300 bg-[#F9FAFC] p-3"
-                      : "rounded-xl bg-[#F9FAFC] p-3"
-                }
-              >
-                <div className="grid grid-cols-1 gap-2">
-                  {tx.flagged && !tx.reviewed ? (
-                    <div className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-1 text-xs font-medium text-yellow-800">
-                      <span>⚠️</span>
-                      <span>{tx.flagReason || "Possible duplicate — please verify"}</span>
-                    </div>
-                  ) : null}
-                  <input
-                    value={tx.date}
-                    onChange={(event) =>
-                      void handleUpdateTransaction(tx.id, { date: event.target.value })
-                    }
-                    className="h-10 rounded-lg border border-[#1B2A4A]/15 bg-white px-2 text-sm"
-                  />
-                  <input
-                    value={tx.desc}
-                    onChange={(event) =>
-                      void handleUpdateTransaction(tx.id, { desc: event.target.value })
-                    }
-                    className="h-10 rounded-lg border border-[#1B2A4A]/15 bg-white px-2 text-sm"
-                  />
-                  <input
-                    type="number"
-                    value={tx.amount}
-                    onChange={(event) =>
-                      void handleUpdateTransaction(tx.id, {
-                        amount: Math.abs(Number(event.target.value)),
-                      })
-                    }
-                    className="h-10 rounded-lg border border-[#1B2A4A]/15 bg-white px-2 text-sm"
-                  />
-                  <div className={`text-xs font-semibold ${getAmountColor(tx)}`}>
-                    {getSignedAmount(tx)}
-                  </div>
-                  <select
-                    value={tx.type}
-                    onChange={(event) =>
-                      void handleUpdateTransaction(tx.id, {
-                        type: event.target.value as TransactionType,
-                      })
-                    }
-                    className={`h-10 rounded-lg px-2 text-sm font-semibold ${getTypePillClasses(tx.type)}`}
-                  >
-                    <option value="expense">Expense</option>
-                    <option value="income">Income</option>
-                    <option value="transfer">Transfer</option>
-                    <option value="refund">Refund</option>
-                  </select>
-                  <div className="space-y-1">
-                    <span className="inline-flex rounded-full bg-[#1B2A4A]/10 px-2 py-1 text-xs font-semibold text-[#1B2A4A]">
-                      {getCategoryEmoji(tx.category)} {tx.category}
-                    </span>
-                    {tx.subcat ? (
-                      <p className="text-xs text-[#1B2A4A]/75">{tx.subcat}</p>
-                    ) : (
-                      <p className="text-xs text-[#1B2A4A]/60">No subcategory</p>
-                    )}
-                  </div>
-                  <select
-                    value={tx.category}
-                    onChange={(event) =>
-                      void handleUpdateTransaction(tx.id, {
-                        category: event.target.value,
-                        subcat: "",
-                        type: getDefaultType(event.target.value),
-                        reviewed: false,
-                        reviewedBy: "",
-                        reviewedAt: null,
-                        reviewedReason: "",
-                      })
-                    }
-                    className="h-10 rounded-lg border border-[#1B2A4A]/15 bg-white px-2 text-sm"
-                  >
-                    {CATEGORIES.map((category) => (
-                      <option key={category.name} value={category.name}>
-                        {category.emoji} {category.name}
-                      </option>
-                    ))}
-                  </select>
-                  {(subcatsByParent[tx.category] ?? []).length > 0 ? (
-                    <select
-                      value={tx.subcat || ""}
-                      onChange={(event) => void handleSubcategorySelect(tx, event.target.value)}
-                      className="h-10 rounded-lg border border-[#1B2A4A]/15 bg-white px-2 text-sm"
-                    >
-                      <option value="">No subcategory</option>
-                      {(subcatsByParent[tx.category] ?? []).map((subcat) => (
-                        <option key={subcat.id} value={subcat.name}>
-                          {subcat.name}
-                        </option>
-                      ))}
-                      <option value="__add_new__">➕ Add new</option>
-                    </select>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAddingSubcatForTx((prev) => ({ ...prev, [tx.id]: true }));
-                        setNewSubcatDrafts((prev) => ({
-                          ...prev,
-                          [tx.id]: prev[tx.id] ?? { name: "", parentCategory: tx.category },
-                        }));
-                      }}
-                      className="h-10 rounded-lg border border-dashed border-[#C9A84C] bg-[#FFF8E8] px-2 text-sm font-semibold text-[#1B2A4A]"
-                    >
-                      + Add subcategory
-                    </button>
-                  )}
-                  {addingSubcatForTx[tx.id] ? (
-                    <div className="grid grid-cols-1 gap-2">
-                      <input
-                        value={newSubcatDrafts[tx.id]?.name ?? ""}
-                        onChange={(event) =>
-                          setNewSubcatDrafts((prev) => ({
-                            ...prev,
-                            [tx.id]: {
-                              name: event.target.value,
-                              parentCategory: prev[tx.id]?.parentCategory || tx.category,
-                            },
-                          }))
-                        }
-                        placeholder="New subcategory"
-                        className="h-10 rounded-lg border border-[#1B2A4A]/15 bg-white px-2 text-sm"
-                      />
-                      <select
-                        value={newSubcatDrafts[tx.id]?.parentCategory ?? tx.category}
-                        onChange={(event) =>
-                          setNewSubcatDrafts((prev) => ({
-                            ...prev,
-                            [tx.id]: {
-                              name: prev[tx.id]?.name ?? "",
-                              parentCategory: event.target.value,
-                            },
-                          }))
-                        }
-                        className="h-10 rounded-lg border border-[#1B2A4A]/15 bg-white px-2 text-sm"
-                      >
-                        {CATEGORIES.map((category) => (
-                          <option key={category.name} value={category.name}>
-                            {category.emoji} {category.name}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => void handleSaveNewSubcategory(tx)}
-                        className="h-10 rounded-lg bg-[#C9A84C] px-2 text-sm font-semibold text-[#1B2A4A]"
-                      >
-                        Save subcategory
-                      </button>
-                    </div>
-                  ) : null}
-                  <input
-                    value={tx.comment}
-                    onChange={(event) =>
-                      void handleUpdateTransaction(tx.id, {
-                        comment: event.target.value,
-                        commentBy: user.uid,
-                      })
-                    }
-                    placeholder="Comment"
-                    className="h-10 rounded-lg border border-[#1B2A4A]/15 bg-white px-2 text-sm"
-                  />
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={tx.reviewed}
-                      onChange={(event) =>
-                        void handleUpdateTransaction(tx.id, {
-                          reviewed: event.target.checked,
-                          reviewedBy: event.target.checked ? user.uid : "",
-                          reviewedAt: event.target.checked ? serverTimestamp() : null,
-                          reviewedReason: event.target.checked ? "skip" : "",
-                        })
-                      }
-                    />
-                    Mark reviewed
-                  </label>
-                </div>
-              </article>
-            ))}
-          </div>
-          </section>
-        ) : null}
-
-        <div className="space-y-3">
-          <Link
-            href="/onboarding/upload"
-            className="inline-block text-sm font-semibold text-[#1B2A4A]/80 underline underline-offset-2"
-          >
-            ← Back to Documents
-          </Link>
+        <div className="flex items-center gap-1 rounded-lg border border-[#E4E8F0] p-0.5">
           <button
             type="button"
-            onClick={startAiAnalysis}
-            disabled={startingAnalysis}
-            className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#C9A84C] px-5 text-base font-semibold text-[#1B2A4A] transition hover:brightness-95"
+            onClick={() => {
+              setFocusMode("queue");
+              setQuickFilter("all");
+            }}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+              focusMode === "queue" ? "bg-[#1B2A4A] text-white" : "text-[#1B2A4A]/60 hover:text-[#1B2A4A]"
+            }`}
           >
-            {startingAnalysis ? "Starting..." : "Start AI Analysis →"}
+            Queue {queueTransactions.length > 0 && `(${queueTransactions.length})`}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setFocusMode("all");
+              setQuickFilter("all");
+            }}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+              focusMode === "all" ? "bg-[#1B2A4A] text-white" : "text-[#1B2A4A]/60 hover:text-[#1B2A4A]"
+            }`}
+          >
+            All ({transactions.length})
           </button>
         </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void markAllAsReviewed()}
+            disabled={markingAllReviewed || pendingReviewableCount === 0}
+            className="rounded-lg border border-[#E4E8F0] bg-white px-3 py-1.5 text-xs font-semibold text-[#1B2A4A] hover:bg-[#F4F6FA] disabled:opacity-40"
+          >
+            ✓ Mark All
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              resetNewTransactionForm();
+              setShowAddTransactionModal(true);
+            }}
+            className="rounded-lg bg-[#C9A84C] px-3 py-1.5 text-xs font-semibold text-[#1B2A4A] hover:brightness-95"
+          >
+            + Add
+          </button>
+          <button
+            type="button"
+            onClick={() => void continueToDashboard()}
+            disabled={continuing}
+            className="rounded-lg bg-[#1B2A4A] px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110 disabled:opacity-50"
+          >
+            {continuing ? "..." : "Dashboard →"}
+          </button>
+        </div>
+      </header>
+
+      <div className="shrink-0 border-b border-[#E4E8F0] bg-[#FAFBFC] px-5 py-1.5">
+        <p className="text-[10px] text-[#9AA5B4]">
+          <span className="font-semibold text-[#1B2A4A]/50">Space/Enter</span> approve &nbsp;·&nbsp;
+          <span className="font-semibold text-[#1B2A4A]/50">↑↓</span> navigate &nbsp;·&nbsp;
+          <span className="font-semibold text-[#1B2A4A]/50">F</span> flag &nbsp;·&nbsp;
+          <span className="font-semibold text-[#1B2A4A]/50">Esc</span> close
+        </p>
       </div>
+
+      {docFilter !== "all" &&
+        (() => {
+          const stmt = documents.find((d) => d.id === docFilter);
+          if (!stmt) return null;
+          return (
+            <div className="shrink-0 flex items-center justify-between border-b border-blue-100 bg-blue-50 px-5 py-2">
+              <p className="text-xs font-semibold text-blue-700">
+                📄 {stmt.fileName?.replace("-parsed.json", "") || "Statement"} ·
+                {stmt.statementStart && stmt.statementEnd
+                  ? ` ${stmt.statementStart} → ${stmt.statementEnd}`
+                  : ""}
+                {stmt.openingBalance != null && stmt.closingBalance != null
+                  ? ` · $${stmt.openingBalance.toFixed(2)} → $${stmt.closingBalance.toFixed(2)}`
+                  : ""}
+              </p>
+              <button
+                type="button"
+                onClick={() => setDocFilter("all")}
+                className="text-xs text-blue-400 hover:text-blue-600"
+              >
+                × clear
+              </button>
+            </div>
+          );
+        })()}
+
+      {error && (
+        <div className="shrink-0 border-b border-red-100 bg-red-50 px-5 py-2 text-xs font-medium text-red-600">
+          {error}
+        </div>
+      )}
+
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex w-[340px] shrink-0 flex-col border-r border-[#E4E8F0] bg-white">
+          <div className="shrink-0 space-y-2 border-b border-[#E4E8F0] p-3">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search merchant..."
+              className="h-9 w-full rounded-lg border border-[#E4E8F0] bg-[#F9FAFC] px-3 text-sm focus:border-[#C9A84C] focus:outline-none"
+            />
+            <div className="flex flex-wrap gap-1.5">
+              {([
+                ["all", "All", `${transactions.length}`],
+                ["unreviewed", "⏳ Pending", `${unreviewedCount}`],
+                ["flagged", "⚠️ Flagged", `${flaggedCount}`],
+                ["reviewed", "✅ Done", `${reviewedReviewableCount}`],
+              ] as [QuickFilter, string, string][]).map(([val, label, count]) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setQuickFilter(val)}
+                  className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition ${
+                    quickFilter === val
+                      ? "border-[#C9A84C] bg-[#FFF8E8] text-[#1B2A4A]"
+                      : "border-[#E4E8F0] text-[#9AA5B4] hover:border-[#C9A84C]/50"
+                  }`}
+                >
+                  {label} {count}
+                </button>
+              ))}
+            </div>
+            <select
+              value={accountFilter}
+              onChange={(e) => setAccountFilter(e.target.value)}
+              className="h-8 w-full rounded-lg border border-[#E4E8F0] bg-[#F9FAFC] px-2 text-xs text-[#1B2A4A] focus:outline-none"
+            >
+              <option value="all">All accounts</option>
+              <option value="__none__">⚠️ No account</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.nickname} ••{a.last4}
+                </option>
+              ))}
+            </select>
+            {/* Statement / source doc filter */}
+            {documents.length > 0 && (
+              <select
+                value={docFilter}
+                onChange={(e) => setDocFilter(e.target.value)}
+                className="h-8 w-full rounded-lg border border-[#E4E8F0] bg-[#F9FAFC] px-2 text-xs text-[#1B2A4A] focus:outline-none"
+              >
+                <option value="all">All statements</option>
+                {documents
+                  .slice()
+                  .sort((a, b) => (b.statementEnd || "").localeCompare(a.statementEnd || ""))
+                  .map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.fileName?.replace("-parsed.json", "") || d.id}
+                      {d.statementEnd ? ` (${d.statementEnd.slice(0, 7)})` : ""}
+                    </option>
+                  ))}
+              </select>
+            )}
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {displayTransactions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <p className="text-3xl">✅</p>
+                <p className="mt-2 text-sm font-semibold text-[#1B2A4A]">
+                  {focusMode === "queue" ? "All caught up!" : "No transactions"}
+                </p>
+                <p className="mt-1 text-xs text-[#9AA5B4]">
+                  {focusMode === "queue" ? "Switch to All to browse" : "Add transactions or adjust filters"}
+                </p>
+              </div>
+            ) : (
+              displayTransactions.map((tx) => {
+                const isSelected = tx.id === selectedTxId;
+                const account = tx.accountId ? accountById.get(tx.accountId) : undefined;
+                return (
+                  <button
+                    key={tx.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedTxId(tx.id);
+                      setShowDetailPanel(true);
+                    }}
+                    className={`w-full border-b border-[#F4F6FA] px-4 py-3 text-left transition ${
+                      isSelected
+                        ? "border-l-2 border-l-[#C9A84C] bg-[#FFF8E8]"
+                        : tx.flagged
+                          ? "bg-amber-50 hover:bg-amber-100/60"
+                          : tx.reviewed
+                            ? "bg-[#F9FAFC] opacity-60 hover:opacity-100"
+                            : "bg-white hover:bg-[#F9FAFC]"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={`truncate text-sm font-semibold ${
+                            tx.reviewed && !tx.flagged ? "text-[#1B2A4A]/50" : "text-[#1B2A4A]"
+                          }`}
+                        >
+                          <span className="flex items-center gap-1">
+                            {tx.merchantName || tx.desc}
+                            {tx.isSubscription && (
+                              <span className="text-[10px] text-blue-400" title="Subscription">
+                                🔄
+                              </span>
+                            )}
+                            {tx.confidence < 0.8 && tx.confidence > 0 && (
+                              <span
+                                className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400"
+                                title={`AI confidence: ${Math.round(tx.confidence * 100)}%`}
+                              />
+                            )}
+                          </span>
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-[#9AA5B4]">
+                          {tx.date}
+                          {account && (
+                            <span
+                              className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                              style={{ backgroundColor: account.color || "#9AA5B4" }}
+                            >
+                              ••{account.last4}
+                            </span>
+                          )}
+                        </p>
+                        <div className="mt-1 flex items-center gap-1.5">
+                          {tx.category && tx.type !== "transfer" && (
+                            <span className="text-[10px] text-[#9AA5B4]">
+                              {getCategoryEmoji(tx.category)} {tx.category}
+                            </span>
+                          )}
+                          {tx.type === "transfer" && (
+                            <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600">
+                              ↔ {tx.transferType || "transfer"}
+                            </span>
+                          )}
+                          {tx.flagged && <span className="text-[10px] text-amber-600">⚠️ flagged</span>}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <span
+                          className={`text-sm font-bold ${
+                            tx.direction === "credit" ? "text-green-600" : "text-[#1B2A4A]"
+                          }`}
+                        >
+                          {tx.direction === "credit" ? "+" : "−"}${tx.amount.toFixed(0)}
+                        </span>
+                        <span
+                          className={`inline-flex h-2 w-2 rounded-full ${
+                            tx.flagged ? "bg-amber-400" : tx.reviewed ? "bg-green-400" : "bg-[#E4E8F0]"
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          <div className="shrink-0 border-t border-[#E4E8F0] px-4 py-2">
+            <p className="text-[10px] text-[#9AA5B4]">
+              {displayTransactions.length} shown · {reviewedProgressPercent}% reviewed
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-1 flex-col overflow-hidden">
+          {!selectedTx ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+              <p className="text-4xl">👈</p>
+              <p className="text-base font-semibold text-[#1B2A4A]">Select a transaction</p>
+              <p className="text-sm text-[#9AA5B4]">or use ↑↓ arrow keys to navigate</p>
+            </div>
+          ) : (
+            <div className="flex flex-1 flex-col overflow-hidden">
+              <div
+                className={`shrink-0 border-b px-6 py-4 ${
+                  selectedTx.flagged
+                    ? "border-amber-200 bg-amber-50"
+                    : selectedTx.reviewed
+                      ? "border-green-100 bg-green-50"
+                      : "border-[#E4E8F0] bg-white"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-[#1B2A4A]">
+                      {selectedTx.merchantName || selectedTx.desc}
+                    </h2>
+                    <p className="mt-0.5 leading-tight text-[10px] text-[#9AA5B4]">
+                      {selectedTx.merchantName && selectedTx.merchantName !== selectedTx.desc
+                        ? selectedTx.desc
+                        : null}
+                    </p>
+                    {selectedTx.isSubscription && (
+                      <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
+                        🔄 Recurring subscription
+                      </span>
+                    )}
+                    {selectedTx.confidence > 0 && selectedTx.confidence < 0.8 && (
+                      <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] text-amber-700">
+                        🤖 AI confidence {Math.round(selectedTx.confidence * 100)}% — please verify this
+                        classification
+                      </div>
+                    )}
+                    {selectedTx.flagged && selectedTx.flagReason && (
+                      <div className="mt-2 rounded-lg border border-amber-200 bg-amber-100 px-3 py-2 text-xs font-medium text-amber-800">
+                        ⚠️ {selectedTx.flagReason}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <p
+                      className={`text-2xl font-bold ${
+                        selectedTx.type === "income" || selectedTx.type === "refund"
+                          ? "text-green-600"
+                          : "text-[#1B2A4A]"
+                      }`}
+                    >
+                      {selectedTx.type === "income" || selectedTx.type === "refund" ? "+" : "−"}
+                      {formatMoney(selectedTx.amount)}
+                    </p>
+                    <p className="text-xs text-[#9AA5B4]">{selectedTx.date}</p>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void handleUpdateTransaction(selectedTx.id, {
+                        reviewed: !selectedTx.reviewed,
+                        reviewedBy: user.uid,
+                        reviewedAt: serverTimestamp(),
+                        reviewedReason: "skip",
+                      })
+                    }
+                    className={`flex-1 rounded-lg py-2 text-sm font-bold transition ${
+                      selectedTx.reviewed
+                        ? "bg-green-100 text-green-700 hover:bg-green-200"
+                        : "bg-[#1B2A4A] text-white hover:brightness-110"
+                    }`}
+                  >
+                    {selectedTx.reviewed ? "✓ Reviewed — click to undo" : "✓ Approve (Space)"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void handleUpdateTransaction(selectedTx.id, {
+                        flagged: !selectedTx.flagged,
+                        flagReason: selectedTx.flagged ? "" : "Needs review",
+                      })
+                    }
+                    className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                      selectedTx.flagged
+                        ? "bg-amber-200 text-amber-800 hover:bg-amber-300"
+                        : "border border-[#E4E8F0] bg-white text-[#1B2A4A] hover:bg-amber-50"
+                    }`}
+                  >
+                    {selectedTx.flagged ? "⚠️ Flagged" : "⚑ Flag"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void deleteOne(selectedTx.id)}
+                    className="rounded-lg border border-[#E4E8F0] bg-white px-4 py-2 text-sm font-semibold text-red-500 hover:bg-red-50"
+                  >
+                    🗑
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto bg-[#F9FAFC] px-6 py-5">
+                <div className="mx-auto max-w-2xl space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                        Type
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(["expense", "income", "transfer", "refund"] as TransactionType[]).map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() =>
+                              void handleUpdateTransaction(selectedTx.id, {
+                                type: t,
+                                ...(t !== "transfer"
+                                  ? {
+                                      transferType: "",
+                                      transferTo: "",
+                                      transferFrom: "",
+                                      transferNote: "",
+                                    }
+                                  : { transferFrom: selectedTx.accountId || "" }),
+                              })
+                            }
+                            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold capitalize transition ${
+                              selectedTx.type === t
+                                ? `${getTypePillClasses(t)} border-transparent`
+                                : "border-[#E4E8F0] bg-white text-[#1B2A4A] hover:border-[#C9A84C]/50"
+                            }`}
+                          >
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                        Person
+                      </label>
+                      <div className="flex gap-1.5">
+                        {members.map((m) => (
+                          <button
+                            key={m.uid}
+                            type="button"
+                            onClick={() =>
+                              void handleUpdateTransaction(selectedTx.id, {
+                                assignedTo: m.uid,
+                                assignedToName: memberNameByUid.get(m.uid) || m.uid,
+                              })
+                            }
+                            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                              selectedTx.assignedTo === m.uid
+                                ? "border-[#1B2A4A] bg-[#1B2A4A] text-white"
+                                : "border-[#E4E8F0] bg-white text-[#1B2A4A] hover:border-[#1B2A4A]/30"
+                            }`}
+                          >
+                            {m.firstName || memberNameByUid.get(m.uid)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Category + Subcategory — only for non-transfer */}
+                  {selectedTx.type !== "transfer" && (
+                    <div className="space-y-3">
+                      {/* Category buttons */}
+                      <div>
+                        <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                          Category
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {CATEGORIES.map((cat) => (
+                            <button
+                              key={cat.name}
+                              type="button"
+                              onClick={() =>
+                                void handleUpdateTransaction(selectedTx.id, {
+                                  category: cat.name,
+                                  subcat: "",
+                                  type: getDefaultType(cat.name),
+                                })
+                              }
+                              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                                selectedTx.category === cat.name
+                                  ? "border-[#C9A84C] bg-[#C9A84C]/10 text-[#1B2A4A]"
+                                  : "border-[#E4E8F0] bg-white text-[#1B2A4A] hover:border-[#C9A84C]/40"
+                              }`}
+                            >
+                              {cat.emoji} {cat.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Subcategory — shown when a category is selected */}
+                      {selectedTx.category && (
+                        <div>
+                          <div className="mb-1.5 flex items-center justify-between">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                              Subcategory
+                            </label>
+                            {selectedTx.subcat && (
+                              <button
+                                type="button"
+                                onClick={() => void handleUpdateTransaction(selectedTx.id, { subcat: "" })}
+                                className="text-[10px] text-[#9AA5B4] hover:text-red-500"
+                              >
+                                × clear
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Existing subcategory pills */}
+                          <div className="flex flex-wrap gap-1.5">
+                            {(subcatsByParent[selectedTx.category] ?? []).map((sub) => (
+                              <button
+                                key={sub.id}
+                                type="button"
+                                onClick={() =>
+                                  void handleUpdateTransaction(selectedTx.id, {
+                                    subcat: sub.name,
+                                    ...getAutoReviewedPatch("subcategory"),
+                                  })
+                                }
+                                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                                  selectedTx.subcat === sub.name
+                                    ? "border-[#1B2A4A] bg-[#1B2A4A] text-white"
+                                    : "border-[#E4E8F0] bg-white text-[#1B2A4A] hover:border-[#1B2A4A]/30"
+                                }`}
+                              >
+                                {sub.name}
+                              </button>
+                            ))}
+
+                            {/* Add new subcategory toggle */}
+                            {!addingSubcatForTx[selectedTx.id] && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAddingSubcatForTx((prev) => ({ ...prev, [selectedTx.id]: true }));
+                                  setNewSubcatDrafts((prev) => ({
+                                    ...prev,
+                                    [selectedTx.id]: prev[selectedTx.id] ?? {
+                                      name: "",
+                                      parentCategory: selectedTx.category,
+                                    },
+                                  }));
+                                }}
+                                className="rounded-full border border-dashed border-[#C9A84C] px-2.5 py-1 text-[11px] font-semibold text-[#C9A84C] hover:bg-[#FFF8E8]"
+                              >
+                                + New
+                              </button>
+                            )}
+                          </div>
+
+                          {/* New subcategory input — shown when adding */}
+                          {addingSubcatForTx[selectedTx.id] && (
+                            <div className="mt-2 flex items-center gap-2">
+                              <input
+                                autoFocus
+                                value={newSubcatDrafts[selectedTx.id]?.name ?? ""}
+                                onChange={(e) =>
+                                  setNewSubcatDrafts((prev) => ({
+                                    ...prev,
+                                    [selectedTx.id]: {
+                                      name: e.target.value,
+                                      parentCategory:
+                                        prev[selectedTx.id]?.parentCategory || selectedTx.category,
+                                    },
+                                  }))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") void handleSaveNewSubcategory(selectedTx);
+                                  if (e.key === "Escape") {
+                                    setAddingSubcatForTx((prev) => ({ ...prev, [selectedTx.id]: false }));
+                                  }
+                                }}
+                                placeholder="Subcategory name..."
+                                className="h-8 flex-1 rounded-lg border border-[#C9A84C] bg-white px-2 text-xs focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => void handleSaveNewSubcategory(selectedTx)}
+                                className="h-8 rounded-lg bg-[#C9A84C] px-3 text-xs font-bold text-[#1B2A4A]"
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setAddingSubcatForTx((prev) => ({ ...prev, [selectedTx.id]: false }))
+                                }
+                                className="h-8 rounded-lg border border-[#E4E8F0] px-2 text-xs text-[#9AA5B4] hover:text-[#1B2A4A]"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Current selection confirmation */}
+                          {selectedTx.subcat && (
+                            <p className="mt-1.5 text-[11px] text-[#1B2A4A]/60">
+                              {getCategoryEmoji(selectedTx.category)} {selectedTx.category}
+                              {" › "}
+                              <span className="font-semibold text-[#1B2A4A]">{selectedTx.subcat}</span>
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {selectedTx.type === "transfer" && (
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                        Transfer Type
+                      </label>
+                      {renderTransferDetails(selectedTx)}
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                      Account
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {accounts.map((acc) => (
+                        <button
+                          key={acc.id}
+                          type="button"
+                          onClick={() => void assignAccount(selectedTx.id, acc.id)}
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                            selectedTx.accountId === acc.id
+                              ? "border-transparent text-white"
+                              : "border-[#E4E8F0] bg-white text-[#1B2A4A] hover:border-[#C9A84C]/40"
+                          }`}
+                          style={selectedTx.accountId === acc.id ? { backgroundColor: acc.color || "#C9A84C" } : undefined}
+                        >
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{
+                              backgroundColor: acc.color || "#C9A84C",
+                              opacity: selectedTx.accountId === acc.id ? 0 : 1,
+                            }}
+                          />
+                          {acc.nickname}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                        Amount
+                      </label>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#9AA5B4]">
+                          $
+                        </span>
+                        <input
+                          type="number"
+                          value={selectedTx.amount}
+                          onChange={(e) =>
+                            void handleUpdateTransaction(selectedTx.id, {
+                              amount: Math.abs(Number(e.target.value)),
+                            })
+                          }
+                          className="h-10 w-full rounded-lg border border-[#E4E8F0] bg-white pl-7 pr-3 text-sm focus:border-[#C9A84C] focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                        Date
+                      </label>
+                      <input
+                        type="date"
+                        value={selectedTx.date}
+                        onChange={(e) => void handleUpdateTransaction(selectedTx.id, { date: e.target.value })}
+                        className="h-10 w-full rounded-lg border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                      Description
+                    </label>
+                    <input
+                      value={selectedTx.desc}
+                      onChange={(e) => void handleUpdateTransaction(selectedTx.id, { desc: e.target.value })}
+                      className="h-10 w-full rounded-lg border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                      Comment
+                    </label>
+                    <input
+                      value={selectedTx.comment}
+                      onChange={(e) =>
+                        void handleUpdateTransaction(selectedTx.id, {
+                          comment: e.target.value,
+                          commentBy: user.uid,
+                        })
+                      }
+                      placeholder="Add a note about this transaction..."
+                      className="h-10 w-full rounded-lg border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none"
+                    />
+                  </div>
+
+                  {selectedTx.flagged && (
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-amber-500">
+                        Flag Reason
+                      </label>
+                      <input
+                        value={selectedTx.flagReason}
+                        onChange={(e) => void handleUpdateTransaction(selectedTx.id, { flagReason: e.target.value })}
+                        placeholder="Why is this flagged?"
+                        className="h-10 w-full rounded-lg border border-amber-200 bg-amber-50 px-3 text-sm focus:border-amber-400 focus:outline-none"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="shrink-0 border-t border-[#E4E8F0] bg-white px-6 py-3">
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const idx = sortedTransactions.findIndex((t) => t.id === selectedTxId);
+                      const prev = sortedTransactions[idx - 1];
+                      if (prev) setSelectedTxId(prev.id);
+                    }}
+                    disabled={sortedTransactions.findIndex((t) => t.id === selectedTxId) === 0}
+                    className="rounded-lg border border-[#E4E8F0] px-4 py-2 text-xs font-semibold text-[#1B2A4A] hover:bg-[#F4F6FA] disabled:opacity-30"
+                  >
+                    ↑ Previous
+                  </button>
+                  <span className="text-xs text-[#9AA5B4]">
+                    {sortedTransactions.findIndex((t) => t.id === selectedTxId) + 1} of {sortedTransactions.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const idx = sortedTransactions.findIndex((t) => t.id === selectedTxId);
+                      const next = sortedTransactions[idx + 1];
+                      if (next) setSelectedTxId(next.id);
+                    }}
+                    disabled={sortedTransactions.findIndex((t) => t.id === selectedTxId) === sortedTransactions.length - 1}
+                    className="rounded-lg border border-[#E4E8F0] px-4 py-2 text-xs font-semibold text-[#1B2A4A] hover:bg-[#F4F6FA] disabled:opacity-30"
+                  >
+                    ↓ Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {toastMessage && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-xl border-l-4 border-green-500 bg-white px-4 py-3 text-sm font-medium text-[#1B2A4A] shadow-lg">
+          {toastMessage}
+        </div>
+      )}
+
+      {showAddTransactionModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" style={{ backdropFilter: "blur(4px)" }}>
+          <div
+            className="w-full max-w-[480px] rounded-[20px] bg-white p-7 shadow-[0_20px_60px_rgba(27,42,74,0.15)]"
+            style={{ animation: shakeAddTransaction ? "kw-shake 0.25s ease-in-out 2" : undefined }}
+          >
+            <style jsx>{`
+              @keyframes kw-shake {
+                0% { transform: translateX(0); }
+                25% { transform: translateX(-6px); }
+                50% { transform: translateX(6px); }
+                75% { transform: translateX(-4px); }
+                100% { transform: translateX(0); }
+              }
+            `}</style>
+            <div className="flex items-start justify-between">
+              <h3 className="text-2xl font-semibold text-[#1B2A4A]">Add Transaction</h3>
+              <button type="button" onClick={() => { setShowAddTransactionModal(false); resetNewTransactionForm(); }} className="text-lg text-[#1B2A4A]/70">×</button>
+            </div>
+            <div className="mt-4 space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-[10px] uppercase tracking-wide text-[#9AA5B4]">Date</span>
+                <input type="date" value={newTransactionForm.date}
+                  onChange={e => setNewTransactionForm(p => ({ ...p, date: e.target.value }))}
+                  className="h-10 w-full rounded-lg border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[10px] uppercase tracking-wide text-[#9AA5B4]">Merchant</span>
+                <input value={newTransactionForm.desc}
+                  onChange={e => setNewTransactionForm(p => ({ ...p, desc: e.target.value }))}
+                  placeholder="e.g. Wegmans, Amazon" className="h-10 w-full rounded-lg border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[10px] uppercase tracking-wide text-[#9AA5B4]">Amount</span>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#1B2A4A]/70">$</span>
+                  <input type="number" min={0} step="0.01" value={newTransactionForm.amount}
+                    onChange={e => setNewTransactionForm(p => ({ ...p, amount: e.target.value }))}
+                    placeholder="0.00" className="h-10 w-full rounded-lg border border-[#E4E8F0] bg-white px-3 pl-7 text-sm focus:border-[#C9A84C] focus:outline-none" />
+                </div>
+              </label>
+              <div>
+                <span className="mb-1 block text-[10px] uppercase tracking-wide text-[#9AA5B4]">Type</span>
+                <div className="flex flex-wrap gap-2">
+                  {(["income","expense","transfer","refund"] as TransactionType[]).map(v => (
+                    <button key={v} type="button"
+                      onClick={() => setNewTransactionForm(p => ({ ...p, type: v }))}
+                      className={`rounded-lg border px-3 py-1 text-xs font-semibold capitalize ${newTransactionForm.type === v ? "border-[#C9A84C] bg-[#C9A84C] text-white" : "border-[#E4E8F0] bg-white text-[#1B2A4A]"}`}>
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <label className="block">
+                <span className="mb-1 block text-[10px] uppercase tracking-wide text-[#9AA5B4]">Account</span>
+                <select value={newTransactionForm.accountId}
+                  onChange={e => setNewTransactionForm(p => ({ ...p, accountId: e.target.value }))}
+                  className="h-10 w-full rounded-lg border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none">
+                  <option value="">No account</option>
+                  {accounts.map(a => <option key={a.id} value={a.id}>{a.nickname} ••{a.last4}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[10px] uppercase tracking-wide text-[#9AA5B4]">Comment</span>
+                <input value={newTransactionForm.comment}
+                  onChange={e => setNewTransactionForm(p => ({ ...p, comment: e.target.value }))}
+                  placeholder="Optional note..." className="h-10 w-full rounded-lg border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none" />
+              </label>
+              {addTransactionError && <p className="text-xs font-medium text-red-600">{addTransactionError}</p>}
+              <button type="button" onClick={() => void saveNewTransaction()} disabled={savingTransaction}
+                className="h-11 w-full rounded-lg bg-[#C9A84C] text-sm font-semibold text-[#1B2A4A] disabled:opacity-60">
+                {savingTransaction ? "Saving..." : "Save Transaction"}
+              </button>
+              <button type="button" onClick={() => { setShowAddTransactionModal(false); resetNewTransactionForm(); }}
+                className="h-10 w-full rounded-lg border border-[#E4E8F0] text-sm font-semibold text-[#1B2A4A]">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
