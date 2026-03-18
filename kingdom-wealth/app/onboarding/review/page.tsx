@@ -50,7 +50,7 @@ type Transaction = {
   reviewedReason: string;
   accountId: string;
   accountLabel: string;
-  transferType: "internal" | "external-own" | "external-third-party" | "";
+  transferType: "internal" | "external-own" | "external-third-party" | "card-payment" | "";
   transferTo: string;
   transferFrom: string;
   transferPairId: string;
@@ -66,6 +66,7 @@ type Transaction = {
   transferToAccountId: string;
   sourceDocId: string;
   month: string;
+  accountSnapshot?: { nickname?: string; bankName?: string; last4?: string; type?: string; color?: string } | null;
 };
 
 type SortKey = "date" | "desc" | "amount" | "category" | "assignedToName";
@@ -100,7 +101,7 @@ type NewTransactionForm = {
   desc: string;
   amount: string;
   type: TransactionType;
-  transferType: "internal" | "external-own" | "external-third-party" | "";
+  transferType: "internal" | "external-own" | "external-third-party" | "card-payment" | "";
   category: string;
   subcat: string;
   accountId: string;
@@ -123,6 +124,12 @@ function isThirdPartyTransfer(tx: Pick<Transaction, "type" | "transferType">) {
   return tx.type === "transfer" && tx.transferType === "external-third-party";
 }
 
+function transferDirectionLabel(direction: string, type: string) {
+  if (type !== "transfer") return null;
+  return direction === "debit"
+    ? { label: "↑ Sent", color: "#F97316", bg: "rgba(249,115,22,0.08)" }
+    : { label: "↓ Received", color: "#16A34A", bg: "rgba(22,163,74,0.08)" };
+}
 
 function detectSuggestedTransferType(
   description: string,
@@ -696,11 +703,10 @@ export default function OnboardingReviewPage() {
   const { user, loading: authLoading } = useAuth();
 
   const [householdId, setHouseholdId] = useState("");
-  const [userOnboardingStep, setUserOnboardingStep] = useState("");
+  const [_userOnboardingStep, setUserOnboardingStep] = useState("");
   const [_activeTab, _setActiveTab] = useState<ReviewTab>("transactions");
   const [loadingContext, setLoadingContext] = useState(true);
   const [error, setError] = useState("");
-  const [_startingAnalysis, setStartingAnalysis] = useState(false);
   const [continuing, setContinuing] = useState(false);
   const [markingAllReviewed, setMarkingAllReviewed] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
@@ -787,7 +793,7 @@ export default function OnboardingReviewPage() {
         const userData = userSnap.data();
         if (!userData) throw new Error("Could not find your user profile.");
 
-        setUserOnboardingStep(String(userData.onboardingStep ?? ""));
+        setUserOnboardingStep(String(userData.onboardingStep ?? "")); // used for guard: loans/complete can revisit
 
         const foundHouseholdId =
           typeof userData.householdId === "string" ? userData.householdId : "";
@@ -874,6 +880,7 @@ export default function OnboardingReviewPage() {
             transferToAccountId: String(data.transferToAccountId ?? ""),
             sourceDocId: String(data.sourceDocId ?? ""),
             month: String(data.month ?? ""),
+            accountSnapshot: data.accountSnapshot ?? null,
           } satisfies Transaction;
         });
         setTransactions(parsed);
@@ -1765,41 +1772,17 @@ export default function OnboardingReviewPage() {
     }
   };
 
-  const _startAiAnalysis = async () => {
-    if (!user) return;
-
-    try {
-      setStartingAnalysis(true);
-      setError("");
-      await updateDoc(doc(db, "users", user.uid), {
-        onboardingStep: "questions",
-      });
-      router.push("/onboarding/questions");
-    } catch (startError) {
-      const message =
-        startError instanceof Error ? startError.message : "Could not start AI analysis.";
-      setError(message);
-    } finally {
-      setStartingAnalysis(false);
-    }
-  };
-
-  const continueToDashboard = async () => {
+  const continueToLoans = async () => {
     if (!user) return;
     try {
       setContinuing(true);
-      const alreadyPastReview =
-        userOnboardingStep === "questions" ||
-        userOnboardingStep === "analyzing" ||
-        userOnboardingStep === "complete";
-      if (!alreadyPastReview) {
-        await updateDoc(doc(db, "users", user.uid), { onboardingStep: "questions" });
-      }
-      router.push("/dashboard");
-    } catch (continueError) {
-      const message =
-        continueError instanceof Error ? continueError.message : "Could not continue.";
-      setError(message);
+      await updateDoc(doc(db, "users", user.uid), {
+        onboardingStep: "loans",
+      });
+      router.push("/onboarding/loans");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not continue.";
+      setError(msg);
     } finally {
       setContinuing(false);
     }
@@ -2238,11 +2221,22 @@ export default function OnboardingReviewPage() {
           </button>
           <button
             type="button"
-            onClick={() => void continueToDashboard()}
+            onClick={() => void continueToLoans()}
             disabled={continuing}
-            className="rounded-lg bg-[#1B2A4A] px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110 disabled:opacity-50"
+            className="inline-flex h-10 items-center justify-center rounded-lg bg-[#1B2A4A] px-4 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {continuing ? "..." : "Dashboard →"}
+            {continuing ? "..." : "Continue →"}
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!user) return;
+              await updateDoc(doc(db, "users", user.uid), { onboardingStep: "loans" });
+              router.push("/onboarding/loans");
+            }}
+            className="text-xs font-semibold text-[#9AA5B4] underline hover:text-[#1B2A4A]"
+          >
+            Skip for now →
           </button>
         </div>
       </header>
@@ -2407,6 +2401,41 @@ export default function OnboardingReviewPage() {
                             )}
                           </span>
                         </p>
+                        {tx.type === "transfer" &&
+                          (tx.transferFromAccountId || tx.transferToAccountId) &&
+                          (() => {
+                            const fromAcc = tx.transferFromAccountId
+                              ? accountById.get(tx.transferFromAccountId)
+                              : null;
+                            const toAcc = tx.transferToAccountId
+                              ? accountById.get(tx.transferToAccountId)
+                              : null;
+                            const fromLabel =
+                              fromAcc?.nickname ??
+                              (tx.direction === "debit"
+                                ? (tx.accountSnapshot?.nickname ?? "This account")
+                                : "External");
+                            const toLabel =
+                              toAcc?.nickname ??
+                              (tx.direction === "credit"
+                                ? (tx.accountSnapshot?.nickname ?? "This account")
+                                : "External");
+                            return (
+                              <span className="mt-0.5 flex items-center gap-1 text-[10px] text-[#9AA5B4]">
+                                <span
+                                  className="inline-block h-2 w-2 rounded-full"
+                                  style={{ backgroundColor: fromAcc?.color ?? "#9AA5B4" }}
+                                />
+                                {fromLabel}
+                                <span>→</span>
+                                <span
+                                  className="inline-block h-2 w-2 rounded-full"
+                                  style={{ backgroundColor: toAcc?.color ?? "#9AA5B4" }}
+                                />
+                                {toLabel}
+                              </span>
+                            );
+                          })()}
                         <p className="mt-0.5 text-[11px] text-[#9AA5B4]">
                           {tx.date}
                           {account && (
@@ -2424,11 +2453,19 @@ export default function OnboardingReviewPage() {
                               {getCategoryEmoji(tx.category)} {tx.category}
                             </span>
                           )}
-                          {tx.type === "transfer" && (
-                            <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600">
-                              ↔ {tx.transferType || "transfer"}
-                            </span>
-                          )}
+                          {tx.type === "transfer" &&
+                            (() => {
+                              const d = transferDirectionLabel(tx.direction, tx.type);
+                              if (!d) return null;
+                              return (
+                                <span
+                                  className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                                  style={{ color: d.color, backgroundColor: d.bg }}
+                                >
+                                  {d.label}
+                                </span>
+                              );
+                            })()}
                           {tx.flagged && <span className="text-[10px] text-amber-600">⚠️ flagged</span>}
                         </div>
                       </div>
@@ -2779,14 +2816,308 @@ export default function OnboardingReviewPage() {
                     </div>
                   )}
 
-                  {selectedTx.type === "transfer" && (
-                    <div>
-                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
-                        Transfer Type
-                      </label>
-                      {renderTransferDetails(selectedTx)}
-                    </div>
-                  )}
+                  {selectedTx.type === "transfer" &&
+                    (() => {
+                      const fromAcc = selectedTx.transferFromAccountId
+                        ? accountById.get(selectedTx.transferFromAccountId)
+                        : null;
+                      const toAcc = selectedTx.transferToAccountId
+                        ? accountById.get(selectedTx.transferToAccountId)
+                        : null;
+                      const isPaired = Boolean(selectedTx.transferPairId);
+                      const isSent = selectedTx.direction === "debit";
+
+                      const fromLabel =
+                        fromAcc?.nickname ??
+                        (isSent
+                          ? (selectedTx.accountSnapshot?.nickname ?? "This account")
+                          : "External");
+                      const toLabel =
+                        toAcc?.nickname ??
+                        (!isSent
+                          ? (selectedTx.accountSnapshot?.nickname ?? "This account")
+                          : "External");
+                      const fromColor = fromAcc?.color ?? "#9AA5B4";
+                      const toColor = toAcc?.color ?? "#9AA5B4";
+
+                      const typeLabels = {
+                        "card-payment": {
+                          label: "Credit card payment",
+                          icon: "💳",
+                          desc: "Paying down a credit card balance",
+                        },
+                        internal: {
+                          label: "Between my accounts",
+                          icon: "🔄",
+                          desc: "Moving money between your own accounts",
+                        },
+                        "external-own": {
+                          label: "My other bank",
+                          icon: "🏦",
+                          desc: "Sent to or received from your own account at another bank",
+                        },
+                        "external-third-party": {
+                          label: "Person / Business",
+                          icon: "👤",
+                          desc: "Zelle, Venmo, PayPal, cash, wire",
+                        },
+                      } as const;
+                      const txTypeKey = selectedTx.transferType;
+                      const currentTypeInfo =
+                        txTypeKey === "card-payment" ||
+                        txTypeKey === "internal" ||
+                        txTypeKey === "external-own" ||
+                        txTypeKey === "external-third-party"
+                          ? typeLabels[txTypeKey]
+                          : null;
+
+                      return (
+                        <div className="space-y-3">
+                          {/* FROM → TO diagram */}
+                          <div className="rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] p-4">
+                            <div className="mb-2 flex items-center justify-between">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                                {currentTypeInfo?.icon}{" "}
+                                {currentTypeInfo?.label ?? "Transfer"}
+                              </p>
+                              {isPaired ? (
+                                <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">
+                                  ✓ Linked pair
+                                </span>
+                              ) : (
+                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                                  ⚠ Single-sided
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Visual flow */}
+                            <div className="flex items-center gap-3">
+                              {/* FROM */}
+                              <div
+                                className="flex-1 rounded-xl border-2 p-3 text-center"
+                                style={{ borderColor: fromColor }}
+                              >
+                                <div
+                                  className="mx-auto mb-1 h-3 w-3 rounded-full"
+                                  style={{ backgroundColor: fromColor }}
+                                />
+                                <p className="text-xs font-bold text-[#1B2A4A]">
+                                  {fromLabel}
+                                </p>
+                                {fromAcc && (
+                                  <p className="font-mono text-[9px] text-[#9AA5B4]">
+                                    ••{fromAcc.last4}
+                                  </p>
+                                )}
+                                <span className="mt-1 inline-block rounded-full bg-orange-100 px-1.5 py-0.5 text-[9px] font-bold text-orange-600">
+                                  ↑ OUT
+                                </span>
+                              </div>
+
+                              {/* Arrow + Amount */}
+                              <div className="flex flex-col items-center gap-1">
+                                <span className="text-lg font-bold text-[#1B2A4A]">
+                                  $
+                                  {Number(selectedTx.amount).toFixed(2)}
+                                </span>
+                                <span className="text-xl text-[#9AA5B4]">→</span>
+                                <span className="text-[9px] text-[#9AA5B4]">
+                                  {selectedTx.date}
+                                </span>
+                              </div>
+
+                              {/* TO */}
+                              <div
+                                className="flex-1 rounded-xl border-2 p-3 text-center"
+                                style={{ borderColor: toColor }}
+                              >
+                                <div
+                                  className="mx-auto mb-1 h-3 w-3 rounded-full"
+                                  style={{ backgroundColor: toColor }}
+                                />
+                                <p className="text-xs font-bold text-[#1B2A4A]">
+                                  {toLabel}
+                                </p>
+                                {toAcc && (
+                                  <p className="font-mono text-[9px] text-[#9AA5B4]">
+                                    ••{toAcc.last4}
+                                  </p>
+                                )}
+                                <span className="mt-1 inline-block rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] font-bold text-green-600">
+                                  ↓ IN
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Transfer type classification — plain language */}
+                          <div>
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                              What kind of transfer?
+                            </p>
+                            <div className="grid grid-cols-2 gap-2">
+                              {(Object.entries(typeLabels) as [keyof typeof typeLabels, (typeof typeLabels)[keyof typeof typeLabels]][]).map(([val, info]) => (
+                                <button
+                                  key={val}
+                                  type="button"
+                                  onClick={() =>
+                                    void handleUpdateTransaction(selectedTx.id, {
+                                      transferType: val,
+                                    })
+                                  }
+                                  className={`rounded-xl border p-2.5 text-left transition ${
+                                    selectedTx.transferType === val
+                                      ? "border-[#1B2A4A] bg-[#1B2A4A] text-white"
+                                      : "border-[#E4E8F0] bg-white text-[#1B2A4A] hover:border-[#1B2A4A]/30"
+                                  }`}
+                                >
+                                  <p className="text-sm font-bold">
+                                    {info.icon} {info.label}
+                                  </p>
+                                  <p
+                                    className={`mt-0.5 text-[9px] leading-tight ${
+                                      selectedTx.transferType === val
+                                        ? "text-white/60"
+                                        : "text-[#9AA5B4]"
+                                    }`}
+                                  >
+                                    {info.desc}
+                                  </p>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Account reassignment */}
+                          <div>
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                              {isPaired
+                                ? "Change destination account"
+                                : "Which account did this go to / come from?"}
+                            </p>
+
+                            <div className="space-y-1.5">
+                              {/* FROM account picker */}
+                              <div className="flex items-center gap-2">
+                                <span className="w-16 shrink-0 text-right text-[10px] font-bold text-orange-500">
+                                  FROM
+                                </span>
+                                <select
+                                  value={
+                                    selectedTx.transferFromAccountId ||
+                                    "__external__"
+                                  }
+                                  onChange={async (e) => {
+                                    const val = e.target.value;
+                                    await handleUpdateTransaction(selectedTx.id, {
+                                      transferFromAccountId:
+                                        val !== "__external__" ? val : "",
+                                    });
+                                    if (selectedTx.transferPairId) {
+                                      const pair = transactions.find(
+                                        (t) =>
+                                          t.transferPairId ===
+                                            selectedTx.transferPairId &&
+                                          t.id !== selectedTx.id
+                                      );
+                                      if (pair) {
+                                        await handleUpdateTransaction(pair.id, {
+                                          transferFromAccountId:
+                                            val !== "__external__" ? val : "",
+                                        });
+                                      }
+                                    }
+                                  }}
+                                  className="h-8 flex-1 rounded-lg border border-[#E4E8F0] bg-white px-2 text-xs focus:border-[#C9A84C] focus:outline-none"
+                                >
+                                  <option value="__external__">
+                                    External (not in app)
+                                  </option>
+                                  {accounts.map((acc) => (
+                                    <option key={acc.id} value={acc.id}>
+                                      {acc.nickname} ••{acc.last4}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              {/* TO account picker */}
+                              <div className="flex items-center gap-2">
+                                <span className="w-16 shrink-0 text-right text-[10px] font-bold text-green-600">
+                                  TO
+                                </span>
+                                <select
+                                  value={
+                                    selectedTx.transferToAccountId ||
+                                    "__external__"
+                                  }
+                                  onChange={async (e) => {
+                                    const val = e.target.value;
+                                    await handleUpdateTransaction(selectedTx.id, {
+                                      transferToAccountId:
+                                        val !== "__external__" ? val : "",
+                                    });
+                                    if (selectedTx.transferPairId) {
+                                      const pair = transactions.find(
+                                        (t) =>
+                                          t.transferPairId ===
+                                            selectedTx.transferPairId &&
+                                          t.id !== selectedTx.id
+                                      );
+                                      if (pair) {
+                                        await handleUpdateTransaction(pair.id, {
+                                          transferToAccountId:
+                                            val !== "__external__" ? val : "",
+                                        });
+                                      }
+                                    }
+                                  }}
+                                  className="h-8 flex-1 rounded-lg border border-[#E4E8F0] bg-white px-2 text-xs focus:border-[#C9A84C] focus:outline-none"
+                                >
+                                  <option value="__external__">
+                                    External (not in app)
+                                  </option>
+                                  {accounts.map((acc) => (
+                                    <option key={acc.id} value={acc.id}>
+                                      {acc.nickname} ••{acc.last4}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+
+                            {isPaired && (
+                              <p className="mt-1.5 text-[9px] text-[#9AA5B4]">
+                                ✓ Both sides of the pair will update together
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Convert to expense */}
+                          <div className="rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] px-4 py-3">
+                            <p className="mb-1 text-[10px] font-bold text-[#9AA5B4]">
+                              Misclassified? This was actually a purchase.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void handleUpdateTransaction(selectedTx.id, {
+                                  type: "expense",
+                                  transferType: "",
+                                  transferPairId: "",
+                                  transferFromAccountId: "",
+                                  transferToAccountId: "",
+                                })
+                              }
+                              className="rounded-lg border border-[#E4E8F0] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#1B2A4A] hover:bg-[#F4F6FA]"
+                            >
+                              Convert to expense →
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                   <div>
                     <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">

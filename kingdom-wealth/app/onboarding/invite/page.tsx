@@ -159,9 +159,9 @@ export default function OnboardingInvitePage() {
     try {
       setFinishing(true);
       await updateDoc(doc(db, "users", user.uid), {
-        onboardingStep: "complete",
+        onboardingStep: "accounts",
       });
-      router.push("/dashboard");
+      router.push("/onboarding/accounts");
     } catch (finishError) {
       const message =
         finishError instanceof Error
@@ -184,9 +184,9 @@ export default function OnboardingInvitePage() {
     try {
       setFinishing(true);
       await updateDoc(doc(db, "users", user.uid), {
-        onboardingStep: "complete",
+        onboardingStep: "accounts",
       });
-      router.push("/dashboard");
+      router.push("/onboarding/accounts");
     } catch (skipError) {
       const message =
         skipError instanceof Error
@@ -269,7 +269,7 @@ export default function OnboardingInvitePage() {
               disabled={finishing}
               className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-[#C9A84C] bg-white px-5 text-base font-semibold text-[#1B2A4A] transition hover:bg-[#F4F6FA]"
             >
-              {finishing ? "Saving..." : "Continue to Dashboard →"}
+              {finishing ? "Saving..." : "Continue to Accounts →"}
             </button>
           </form>
 

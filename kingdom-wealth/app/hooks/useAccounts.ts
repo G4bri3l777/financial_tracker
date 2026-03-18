@@ -19,6 +19,7 @@ export type HouseholdAccount = {
   nickname: string;
   bankName: string;
   last4: string;
+  cardLast4?: string;
   type: AccountType;
   subtype: AccountSubtype;
   owner: string;
@@ -52,6 +53,7 @@ export function useAccounts(householdId?: string) {
               nickname: String(data.nickname ?? ""),
               bankName: String(data.bankName ?? ""),
               last4: String(data.last4 ?? ""),
+              cardLast4: data.cardLast4 ? String(data.cardLast4) : undefined,
               type: (data.type as AccountType | undefined) ?? "credit",
               subtype: (data.subtype as AccountSubtype | undefined) ?? "",
               owner: String(data.owner ?? ""),

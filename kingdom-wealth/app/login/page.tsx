@@ -3,7 +3,19 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { doc, getDoc } from "firebase/firestore";
 import { loginUser } from "../lib/auth";
+import { db } from "../lib/firebase";
+
+const stepRoutes: Record<string, string> = {
+  profile:   "/onboarding/profile",
+  household: "/onboarding/household",
+  invite:    "/onboarding/invite",
+  accounts:  "/onboarding/accounts",
+  review:    "/onboarding/review",
+  loans:     "/onboarding/loans",
+  complete:  "/dashboard",
+};
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,8 +30,11 @@ export default function LoginPage() {
 
     try {
       setLoading(true);
-      await loginUser(email, password);
-      router.push("/dashboard");
+      const user = await loginUser(email, password);
+      const userSnap = await getDoc(doc(db, "users", user.uid));
+      const onboardingStep = String(userSnap.data()?.onboardingStep ?? "complete");
+      const route = stepRoutes[onboardingStep] ?? "/dashboard";
+      router.replace(route);
     } catch (submitError) {
       const message =
         submitError instanceof Error

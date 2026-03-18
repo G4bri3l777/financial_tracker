@@ -139,10 +139,10 @@ export default function OnboardingHouseholdPage() {
         });
 
         await updateDoc(doc(db, "users", user.uid), {
-          onboardingStep: "complete",
+          onboardingStep: "accounts",
         });
 
-        router.push("/dashboard");
+        router.push("/onboarding/accounts");
         return;
       }
 
