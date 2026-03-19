@@ -228,16 +228,16 @@ export default function TransactionsPage() {
   }, [accounts]);
 
   if (authLoading || loadingCtx) return (
-    <div className="flex h-screen items-center justify-center bg-[#F4F6FA]">
+    <div className="flex h-screen items-center justify-center bg-kw-bg">
       <p className="text-sm text-[#1B2A4A]/40">Loading...</p>
     </div>
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#F4F6FA] text-[#1B2A4A]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-kw-bg text-kw-navy">
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-[#1B2A4A] shadow-lg border border-[#E4E8F0]">
+        <div className="kw-toast">
           {toast}
         </div>
       )}
@@ -247,7 +247,7 @@ export default function TransactionsPage() {
           <div className="flex items-center gap-3">
           
             <h1 className="text-xl font-bold text-[#1B2A4A]">Transactions</h1>
-            <span className="rounded-full bg-[#F4F6FA] px-2.5 py-1 text-xs font-semibold text-[#9AA5B4]">
+            <span className="kw-badge-gray">
               {filtered.length} shown
             </span>
           </div>
@@ -255,7 +255,7 @@ export default function TransactionsPage() {
             <button
               type="button"
               onClick={() => setShowAdd((p) => !p)}
-              className="rounded-xl bg-[#C9A84C] px-4 py-2.5 text-sm font-bold text-[#1B2A4A]"
+              className="kw-btn-primary"
             >
               {showAdd ? "✕ Cancel" : "+ Add Transaction"}
             </button>
@@ -266,8 +266,8 @@ export default function TransactionsPage() {
       <div className="mx-auto max-w-5xl space-y-4 px-6 py-5">
 
         {showAdd && householdId && user && (
-          <div className="rounded-2xl border border-[#E4E8F0] bg-white p-6">
-            <h2 className="mb-4 text-sm font-bold text-[#1B2A4A]">New Transaction</h2>
+          <div className="kw-card">
+            <h2 className="mb-4 kw-section-title">New Transaction</h2>
             <AddTransactionForm
               householdId={householdId}
               user={user}
@@ -285,9 +285,9 @@ export default function TransactionsPage() {
         )}
 
         {budgetVsActual.length > 0 && (
-          <div className="rounded-2xl border border-[#E4E8F0] bg-white p-5">
+          <div className="kw-card">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-[#1B2A4A]">
+              <h3 className="kw-section-title">
                 Budget vs Actual — {new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}
               </h3>
               <Link href="/budget" className="text-xs font-semibold text-[#C9A84C] hover:text-[#1B2A4A]">
@@ -317,7 +317,7 @@ export default function TransactionsPage() {
           </div>
         )}
 
-        <div className="rounded-2xl border border-[#E4E8F0] bg-white p-4">
+        <div className="rounded-2xl border border-kw-border bg-white p-4">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[180px] flex-1">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#9AA5B4] text-xs">⌕</span>
@@ -332,7 +332,7 @@ export default function TransactionsPage() {
             <select
               value={accountFilter}
               onChange={e => setAccountFilter(e.target.value)}
-              className="h-8 rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] px-2 text-xs focus:border-[#C9A84C] focus:outline-none"
+              className="kw-input-sm"
             >
               <option value="all">All accounts</option>
               {accounts.map(a => <option key={a.id} value={a.id}>{a.nickname}</option>)}
@@ -340,7 +340,7 @@ export default function TransactionsPage() {
             <select
               value={categoryFilter}
               onChange={e => { setCategoryFilter(e.target.value); setSubcatFilter("all"); }}
-              className="h-8 rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] px-2 text-xs focus:border-[#C9A84C] focus:outline-none"
+              className="kw-input-sm"
             >
               <option value="all">All categories</option>
               {CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.emoji} {c.name}</option>)}
@@ -358,7 +358,7 @@ export default function TransactionsPage() {
             <select
               value={personFilter}
               onChange={e => setPersonFilter(e.target.value)}
-              className="h-8 rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] px-2 text-xs focus:border-[#C9A84C] focus:outline-none"
+              className="kw-input-sm"
             >
               <option value="all">Everyone</option>
               {members.map(m => <option key={m.uid} value={m.uid}>{m.firstName || m.displayName}</option>)}
@@ -366,7 +366,7 @@ export default function TransactionsPage() {
             <select
               value={typeFilter}
               onChange={e => setTypeFilter(e.target.value)}
-              className="h-8 rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] px-2 text-xs focus:border-[#C9A84C] focus:outline-none"
+              className="kw-input-sm"
             >
               <option value="all">All types</option>
               <option value="expense">Expense</option>
@@ -378,14 +378,14 @@ export default function TransactionsPage() {
               type="date"
               value={dateFrom}
               onChange={e => setDateFrom(e.target.value)}
-              className="h-8 rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] px-2 text-xs focus:border-[#C9A84C] focus:outline-none"
+              className="kw-input-sm"
             />
-            <span className="text-xs text-[#9AA5B4]">—</span>
+            <span className="kw-caption">—</span>
             <input
               type="date"
               value={dateTo}
               onChange={e => setDateTo(e.target.value)}
-              className="h-8 rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] px-2 text-xs focus:border-[#C9A84C] focus:outline-none"
+              className="kw-input-sm"
             />
             {(accountFilter !== "all" || categoryFilter !== "all" || personFilter !== "all" || typeFilter !== "all" || dateFrom || dateTo || search) && (
               <button
@@ -405,7 +405,7 @@ export default function TransactionsPage() {
 
         <div className="overflow-hidden rounded-2xl border border-[#E4E8F0] bg-white">
           {filtered.length === 0 ? (
-            <div className="py-16 text-center text-sm text-[#9AA5B4]">No transactions match these filters.</div>
+            <div className="kw-empty text-sm text-kw-muted">No transactions match these filters.</div>
           ) : (
             paginatedFiltered.map((tx, i) => {
               const acc = tx.accountId ? accountById.get(tx.accountId) : undefined;
@@ -439,7 +439,7 @@ export default function TransactionsPage() {
                         )}
                       </p>
                       {(tx.category || tx.subcat) && (
-                        <p className="text-[10px] text-[#9AA5B4]">
+                        <p className="kw-caption text-[10px]">
                           {getCategoryEmoji(tx.category)} {tx.category}
                           {tx.subcat && ` › ${tx.subcat}`}
                         </p>
@@ -454,13 +454,13 @@ export default function TransactionsPage() {
                     <span className={`w-20 shrink-0 text-right text-sm font-bold ${isCredit ? "text-green-600" : "text-[#1B2A4A]"}`}>
                       {isCredit ? "+" : "−"}{fmt(tx.amount)}
                     </span>
-                    <span className="text-[10px] text-[#9AA5B4]">{isExpanded ? "▲" : "▾"}</span>
+                    <span className="kw-caption text-[10px]">{isExpanded ? "▲" : "▾"}</span>
                   </button>
                   {isExpanded && (
                     <div className="border-t border-[#F4F6FA] bg-[#F9FAFC] px-5 py-4">
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                         <div>
-                          <label className="mb-1 block text-[10px] font-bold uppercase text-[#9AA5B4]">Date</label>
+                          <label className="kw-label">Date</label>
                           <input
                             type="date"
                             defaultValue={tx.date}
@@ -469,7 +469,7 @@ export default function TransactionsPage() {
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-[10px] font-bold uppercase text-[#9AA5B4]">Amount</label>
+                          <label className="kw-label">Amount</label>
                           <input
                             type="number"
                             defaultValue={tx.amount}
@@ -478,7 +478,7 @@ export default function TransactionsPage() {
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-[10px] font-bold uppercase text-[#9AA5B4]">Category</label>
+                          <label className="kw-label">Category</label>
                           <select
                             defaultValue={tx.category}
                             onChange={e => void updateTx(tx.id, { category: e.target.value, subcat: "" })}
@@ -489,7 +489,7 @@ export default function TransactionsPage() {
                           </select>
                         </div>
                         <div>
-                          <label className="mb-1 block text-[10px] font-bold uppercase text-[#9AA5B4]">Subcategory</label>
+                          <label className="kw-label">Subcategory</label>
                           <select
                             defaultValue={tx.subcat}
                             onChange={e => void updateTx(tx.id, { subcat: e.target.value })}
@@ -500,7 +500,7 @@ export default function TransactionsPage() {
                           </select>
                         </div>
                         <div>
-                          <label className="mb-1 block text-[10px] font-bold uppercase text-[#9AA5B4]">Account</label>
+                          <label className="kw-label">Account</label>
                           <select
                             defaultValue={tx.accountId}
                             onChange={e => void updateTx(tx.id, { accountId: e.target.value })}
@@ -511,7 +511,7 @@ export default function TransactionsPage() {
                           </select>
                         </div>
                         <div>
-                          <label className="mb-1 block text-[10px] font-bold uppercase text-[#9AA5B4]">Person</label>
+                          <label className="kw-label">Person</label>
                           <select
                             defaultValue={tx.assignedTo}
                             onChange={e => {
@@ -524,7 +524,7 @@ export default function TransactionsPage() {
                           </select>
                         </div>
                         <div className="col-span-2">
-                          <label className="mb-1 block text-[10px] font-bold uppercase text-[#9AA5B4]">Comment</label>
+                          <label className="kw-label">Comment</label>
                           <input
                             type="text"
                             defaultValue={tx.comment}
@@ -534,10 +534,10 @@ export default function TransactionsPage() {
                           />
                         </div>
                         <div className="col-span-2 sm:col-span-4">
-                          <label className="mb-1 block text-[10px] font-bold uppercase text-[#9AA5B4]">Receipt {tx.receiptUrl && "✅"}</label>
+                          <label className="kw-label">Receipt {tx.receiptUrl && "✅"}</label>
                           <div className="flex items-center gap-3">
                             {tx.receiptUrl && (
-                              <a href={tx.receiptUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-[#E4E8F0] px-3 py-1.5 text-xs font-semibold text-[#1B2A4A] hover:bg-[#F4F6FA]">
+                              <a href={tx.receiptUrl} target="_blank" rel="noreferrer" className="kw-btn-sm">
                                 View receipt →
                               </a>
                             )}
@@ -568,7 +568,7 @@ export default function TransactionsPage() {
           )}
           {filtered.length > 0 && (
             <div className="flex items-center justify-between border-t border-[#F4F6FA] px-5 py-3">
-              <span className="text-xs text-[#9AA5B4]">
+              <span className="kw-caption">
                 Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
               </span>
               <div className="flex items-center gap-2">
@@ -576,18 +576,18 @@ export default function TransactionsPage() {
                   type="button"
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage <= 1}
-                  className="rounded-lg border border-[#E4E8F0] px-3 py-1.5 text-xs font-semibold text-[#1B2A4A] disabled:cursor-not-allowed disabled:opacity-50 hover:bg-[#F9FAFC]"
+                  className="kw-btn-sm disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   ← Prev
                 </button>
-                <span className="text-xs font-semibold text-[#1B2A4A]">
+                <span className="text-xs font-semibold text-kw-navy">
                   Page {currentPage} of {totalPages}
                 </span>
                 <button
                   type="button"
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage >= totalPages}
-                  className="rounded-lg border border-[#E4E8F0] px-3 py-1.5 text-xs font-semibold text-[#1B2A4A] disabled:cursor-not-allowed disabled:opacity-50 hover:bg-[#F9FAFC]"
+                  className="kw-btn-sm disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Next →
                 </button>

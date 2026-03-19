@@ -73,14 +73,14 @@ export default function AppHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-50 h-14 border-b border-[#E4E8F0] bg-white">
+    <header className="sticky top-0 z-50 h-14 border-b border-kw-border bg-white">
       <div className="flex h-full w-full items-center justify-between px-4">
         {/* ── LEFT: Logo ──────────────────────────────── */}
         <Link href="/dashboard" className="flex items-center gap-2.5">
           {/* <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#1B2A4A]">
             <span className="text-sm font-black text-[#C9A84C]">KW</span>
           </div> */}
-          <span className="hidden text-sm font-bold text-[#1B2A4A] sm:block">
+          <span className="hidden text-sm font-bold text-kw-navy sm:block">
             Kingdom Wealth
           </span>
         </Link>
@@ -94,7 +94,7 @@ export default function AppHeader() {
             <button
               type="button"
               onClick={() => setDropdownOpen((p) => !p)}
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#C9A84C] text-sm font-bold text-[#1B2A4A] transition hover:opacity-90"
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-kw-gold text-sm font-bold text-kw-navy transition hover:opacity-90"
               title={displayName}
             >
               {initials}
@@ -102,14 +102,14 @@ export default function AppHeader() {
 
             {/* Dropdown */}
             {dropdownOpen && (
-              <div className="absolute right-0 top-11 w-56 overflow-hidden rounded-2xl border border-[#E4E8F0] bg-white shadow-xl">
-         
+              <div className="absolute right-0 top-11 w-56 overflow-hidden rounded-2xl border border-kw-border bg-white shadow-xl">
+
                 {/* Sign out */}
-                <div className="border-t border-[#F4F6FA] p-1.5">
+                <div className="border-t border-kw-bg p-1.5">
                   <button
                     type="button"
                     onClick={() => void handleSignOut()}
-                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold text-red-500 hover:bg-red-50"
+                    className="kw-btn-danger w-full gap-2.5"
                   >
                     <span className="text-base"></span>
                     Sign out

@@ -200,10 +200,10 @@ export default function OnboardingHouseholdPage() {
   return (
     <div className="min-h-screen bg-[#F4F6FA] text-[#1B2A4A]">
       {/* Header */}
-      <div className="border-b border-[#E4E8F0] bg-white px-6 py-5">
+      <div className="border-b border-kw-border bg-white px-4 py-4 sm:px-6 sm:py-5">
         <div className="mx-auto max-w-2xl">
           <OnboardingProgressDots currentStep="Household" userRole={role ?? ""} />
-          <h1 className="text-2xl font-bold text-[#1B2A4A]">
+          <h1 className="text-xl font-bold text-kw-navy sm:text-2xl">
             {role === "member" ? "Your household" : "Set up your household"}
           </h1>
           <p className="mt-1 text-sm text-[#9AA5B4]">
@@ -214,7 +214,7 @@ export default function OnboardingHouseholdPage() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-2xl space-y-5 px-6 py-8">
+      <div className="mx-auto max-w-2xl space-y-5 px-4 py-5 sm:px-6 sm:py-8">
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
             {error}

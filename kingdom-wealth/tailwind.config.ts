@@ -11,6 +11,14 @@ const config: Config = {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
+        kw: {
+          navy:   "#1B2A4A",
+          gold:   "#C9A84C",
+          muted:  "#9AA5B4",
+          border: "#E4E8F0",
+          bg:     "#F4F6FA",
+          soft:   "#F9FAFC",
+        },
       },
     },
   },

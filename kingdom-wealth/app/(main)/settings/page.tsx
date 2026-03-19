@@ -225,7 +225,7 @@ export default function SettingsPage() {
   }
 
   if (authLoading || loadingCtx) return (
-    <div className="flex h-screen items-center justify-center bg-[#F4F6FA]">
+    <div className="kw-page flex items-center justify-center">
       <p className="text-sm text-[#1B2A4A]/40">Loading...</p>
     </div>
   );
@@ -235,19 +235,19 @@ export default function SettingsPage() {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-[#E4E8F0] bg-white px-5 py-2.5 text-sm font-semibold text-[#1B2A4A] shadow-lg">
+        <div className="kw-toast">
           {toast}
         </div>
       )}
 
       {/* Re-auth modal */}
       {reAuthAction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+        <div className="kw-modal-backdrop">
+          <div className="kw-modal">
             <h3 className="mb-1 text-lg font-bold text-[#1B2A4A]">
               Confirm your password
             </h3>
-            <p className="mb-4 text-xs text-[#9AA5B4]">
+            <p className="mb-4 kw-caption">
               For security, enter your current password to continue.
             </p>
             <input
@@ -256,7 +256,7 @@ export default function SettingsPage() {
               onChange={e => setReAuthPassword(e.target.value)}
               onKeyDown={e => e.key === "Enter" && void handleReAuth()}
               placeholder="Current password"
-              className="h-10 w-full rounded-xl border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none"
+              className="kw-input"
             />
             {reAuthError && (
               <p className="mt-2 text-xs font-semibold text-red-600">{reAuthError}</p>
@@ -273,7 +273,7 @@ export default function SettingsPage() {
               <button
                 type="button"
                 onClick={() => { setReAuthAction(null); setReAuthPassword(""); setReAuthError(""); }}
-                className="flex-1 rounded-xl border border-[#E4E8F0] py-2.5 text-sm font-semibold text-[#9AA5B4]"
+                className="kw-btn-secondary flex-1"
               >
                 Cancel
               </button>
@@ -301,8 +301,8 @@ export default function SettingsPage() {
       <div className="mx-auto max-w-2xl flex-1 space-y-5 px-6 py-6">
 
         {/* ── APP NAVIGATION ───────────────────────────────── */}
-        <section className="rounded-2xl border border-[#E4E8F0] bg-white p-5">
-          <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+        <section className="kw-card">
+          <p className="kw-label mb-3">
             Go to
           </p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -317,11 +317,11 @@ export default function SettingsPage() {
               <Link
                 key={link.label}
                 href={link.href}
-                className="flex flex-col gap-1 rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] px-4 py-3 hover:border-[#C9A84C] hover:bg-[#FFF8E8] transition-colors"
+                className="kw-card-compact flex flex-col gap-1 hover:border-[#C9A84C] hover:bg-[#FFF8E8] transition-colors"
               >
                 <span className="text-xl">{link.emoji}</span>
-                <span className="text-xs font-bold text-[#1B2A4A]">{link.label}</span>
-                <span className="text-[10px] text-[#9AA5B4]">{link.desc}</span>
+                <span className="kw-section-title text-xs">{link.label}</span>
+                <span className="kw-caption text-[10px]">{link.desc}</span>
               </Link>
             ))}
           </div>

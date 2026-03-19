@@ -525,7 +525,7 @@ export default function BudgetPage() {
   }
 
   if (authLoading || loadingCtx || budgetLoading) return (
-    <div className="flex flex-1 items-center justify-center bg-[#F4F6FA]">
+    <div className="flex flex-1 items-center justify-center bg-kw-bg">
       <p className="text-sm text-[#1B2A4A]/40">Loading...</p>
     </div>
   );
@@ -535,10 +535,10 @@ export default function BudgetPage() {
     .reduce((s, [, v]) => s + v, 0);
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto bg-[#F4F6FA] text-[#1B2A4A]">
+    <div className="flex flex-1 flex-col overflow-y-auto bg-kw-bg text-kw-navy">
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-green-200 bg-white px-5 py-2.5 text-sm font-semibold text-green-700 shadow-lg">
+        <div className="kw-toast">
           {toast}
         </div>
       )}
@@ -558,7 +558,7 @@ export default function BudgetPage() {
               <button
                 type="button"
                 onClick={() => setBudgetMonth(prevMonth(budgetMonth))}
-                className="rounded-lg border border-[#E4E8F0] px-2 py-1 text-xs text-[#9AA5B4] hover:text-[#1B2A4A]"
+                className="kw-btn-sm px-2 py-1 text-kw-muted hover:text-kw-navy"
               >
                 ←
               </button>
@@ -568,7 +568,7 @@ export default function BudgetPage() {
               <button
                 type="button"
                 onClick={() => setBudgetMonth(nextMonth(budgetMonth))}
-                className="rounded-lg border border-[#E4E8F0] px-2 py-1 text-xs text-[#9AA5B4] hover:text-[#1B2A4A]"
+                className="kw-btn-sm px-2 py-1 text-kw-muted hover:text-kw-navy"
               >
                 →
               </button>
@@ -612,7 +612,7 @@ export default function BudgetPage() {
                 type="button"
                 disabled={saving || surplus < 0}
                 onClick={() => void proposeBudget()}
-                className="rounded-xl bg-[#C9A84C] px-5 py-2.5 text-sm font-bold text-[#1B2A4A] disabled:opacity-40"
+                className="kw-btn-primary px-5"
                 title={surplus < 0 ? "Fix deficit first" : ""}
               >
                 {saving ? "Saving..." : "Propose →"}
@@ -632,7 +632,7 @@ export default function BudgetPage() {
                   type="button"
                   disabled={saving}
                   onClick={() => void requestChanges()}
-                  className="rounded-xl border border-[#E4E8F0] bg-white px-4 py-2.5 text-sm font-semibold text-[#9AA5B4]"
+                  className="kw-btn-secondary text-kw-muted"
                 >
                   Request Changes
                 </button>
@@ -660,7 +660,7 @@ export default function BudgetPage() {
                   setCategories(init);
                   scheduleSave(init, comments);
                 }}
-                className="rounded-xl border border-[#E4E8F0] bg-white px-3 py-2.5 text-xs font-semibold text-[#9AA5B4] hover:text-[#1B2A4A]"
+                className="kw-btn-secondary px-3 text-xs text-kw-muted hover:text-kw-navy"
               >
                 ↺ Reset
               </button>
@@ -704,7 +704,7 @@ export default function BudgetPage() {
             : 0;
 
           return (
-            <div className="rounded-2xl border border-[#E4E8F0] bg-white p-5">
+            <div className="kw-card">
               {isCurrent && (
                 <p className="mb-3 text-xs font-semibold text-amber-600">
                   📅 Month in progress — figures will update as income and expenses are recorded
@@ -721,7 +721,7 @@ export default function BudgetPage() {
                   /* Simplified: Actual Received | Actual Expenses | Real Balance */
                   <>
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                      <p className="kw-label">
                         Actually Received
                       </p>
                       <p className={`text-2xl font-bold ${
@@ -729,12 +729,12 @@ export default function BudgetPage() {
                       }`}>
                         {actualIncome > 0 ? fmt(actualIncome) : "—"}
                       </p>
-                      <p className="text-[10px] text-[#9AA5B4]">
+                      <p className="kw-caption text-[10px]">
                         {actualIncome > 0 ? "income received" : "no income recorded"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                      <p className="kw-label">
                         Actual Expenses
                       </p>
                       <p
@@ -745,18 +745,18 @@ export default function BudgetPage() {
                       >
                         {totalActualExpenses > 0 ? fmt(totalActualExpenses) : "—"}
                       </p>
-                      <p className="text-[10px] text-[#9AA5B4]">
+                      <p className="kw-caption text-[10px]">
                         {totalActualExpenses > 0 ? "spent" : "no spending"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                      <p className="kw-label">
                         Real Balance
                       </p>
                       <p className="text-2xl font-bold" style={{ color: realBalanceColor }}>
                         {(realBalance >= 0 ? "+" : "−") + fmt(Math.abs(realBalance))}
                       </p>
-                      <p className="text-[10px] text-[#9AA5B4]">
+                      <p className="kw-caption text-[10px]">
                         {realBalance >= 0 ? "Surplus" : "Deficit"} · received − spent
                       </p>
                     </div>
@@ -766,11 +766,11 @@ export default function BudgetPage() {
                   <>
                     {/* Col 1: Income */}
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                      <p className="kw-label">
                         {isPast ? "Planned Income" : "Monthly Income"}
                       </p>
                       <p className="text-2xl font-bold text-[#1B2A4A]">{fmt(monthlyIncome)}</p>
-                      <p className="text-[10px] text-[#9AA5B4]">
+                      <p className="kw-caption text-[10px]">
                         {members.map(m => m.firstName || m.displayName).join(" + ")}
                       </p>
                       {(isPast || isCurrent) && actualIncome > 0 && (
@@ -783,7 +783,7 @@ export default function BudgetPage() {
                           }`}>
                             {fmt(actualIncome)}
                           </p>
-                          <p className="text-[10px] text-[#9AA5B4]">
+                          <p className="kw-caption text-[10px]">
                             {actualIncome >= monthlyIncome
                               ? "Full amount received"
                               : `${fmt(monthlyIncome - actualIncome)} pending`}
@@ -794,7 +794,7 @@ export default function BudgetPage() {
 
                     {/* Col 2: Budgeted + Actual Expenses */}
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                      <p className="kw-label">
                         Budgeted Expenses
                       </p>
                       <p
@@ -805,7 +805,7 @@ export default function BudgetPage() {
                       >
                         {totalBudgeted > 0 ? fmt(totalBudgeted) : "—"}
                       </p>
-                      <p className="text-[10px] text-[#9AA5B4]">
+                      <p className="kw-caption text-[10px]">
                         {isFuture ? "from your budget plan" : "from your plan"}
                       </p>
                       {(isPast || isCurrent) && (
@@ -821,7 +821,7 @@ export default function BudgetPage() {
                           >
                             {totalActualExpenses > 0 ? fmt(totalActualExpenses) : "—"}
                           </p>
-                          <p className="text-[10px] text-[#9AA5B4]">
+                          <p className="kw-caption text-[10px]">
                             {totalActualExpenses > 0 && totalBudgeted > 0
                               ? totalActualExpenses > totalBudgeted
                                 ? `${fmt(totalActualExpenses - totalBudgeted)} over budget`
@@ -834,13 +834,13 @@ export default function BudgetPage() {
 
                     {/* Col 3: Expected + Real Balance */}
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                      <p className="kw-label">
                         Expected Balance
                       </p>
                       <p className="text-2xl font-bold" style={{ color: expectedBalanceColor }}>
                         {(surplusVsBudget >= 0 ? "+" : "−") + fmt(Math.abs(surplusVsBudget))}
                       </p>
-                      <p className="text-[10px] text-[#9AA5B4]">
+                      <p className="kw-caption text-[10px]">
                         {surplusVsBudget >= 0 ? "Surplus" : "Deficit"} · {budgetPct}% budgeted
                       </p>
                       {(isPast || isCurrent) && (
@@ -851,7 +851,7 @@ export default function BudgetPage() {
                           <p className="text-2xl font-bold" style={{ color: realBalanceColor }}>
                             {(realBalance >= 0 ? "+" : "−") + fmt(Math.abs(realBalance))}
                           </p>
-                          <p className="text-[10px] text-[#9AA5B4]">
+                          <p className="kw-caption text-[10px]">
                             {realBalance >= 0 ? "Surplus" : "Deficit"} · received − spent
                           </p>
                         </>
@@ -873,7 +873,7 @@ export default function BudgetPage() {
 
         {/* ── APPROVAL STATUS ─────────────────────────── */}
         {!isPast && budget && (
-          <div className="rounded-2xl border border-[#E4E8F0] bg-white px-5 py-3">
+          <div className="rounded-2xl border border-kw-border bg-white px-5 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 {(["draft","pending_approval","approved"] as const).map((s, i) => (
@@ -1227,7 +1227,7 @@ export default function BudgetPage() {
                         <button
                           type="button"
                           onClick={() => { setAddingCatTo(null); setNewCatName(""); }}
-                          className="text-[10px] text-[#9AA5B4]"
+                          className="kw-caption text-[10px]"
                         >
                           Cancel
                         </button>
@@ -1354,7 +1354,7 @@ export default function BudgetPage() {
         </div>
 
         {!isPast && (
-          <div className="flex flex-wrap gap-4 rounded-xl border border-[#E4E8F0] bg-white px-4 py-3 text-[11px] text-[#9AA5B4]">
+          <div className="kw-card-compact flex flex-wrap gap-4 text-[11px] text-kw-muted">
             <span>✅ Within DR guideline</span>
             <span>⚠️ Over DR guideline</span>
             {isCurrent && (

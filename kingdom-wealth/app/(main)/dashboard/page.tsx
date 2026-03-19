@@ -1014,7 +1014,7 @@ export default function DashboardPage() {
   }
 
   if (authLoading) return (
-    <div className="flex h-screen items-center justify-center bg-[#F4F6FA]">
+    <div className="flex h-screen items-center justify-center bg-kw-bg">
       <p className="text-sm text-[#1B2A4A]/40">Loading...</p>
     </div>
   );
@@ -1533,7 +1533,7 @@ export default function DashboardPage() {
                                   : "All time"}
                         </button>
                       ))}
-                      <span className="text-xs text-[#9AA5B4]">or</span>
+                      <span className="kw-caption">or</span>
                       <input
                         type="date"
                         value={dateFrom}
@@ -1541,9 +1541,9 @@ export default function DashboardPage() {
                           setDateFrom(e.target.value);
                           setDatePreset("");
                         }}
-                        className="h-8 rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] px-2 text-xs focus:border-[#C9A84C] focus:outline-none"
+                        className="kw-input-sm"
                       />
-                      <span className="text-xs text-[#9AA5B4]">—</span>
+                      <span className="kw-caption">—</span>
                       <input
                         type="date"
                         value={dateTo}
@@ -1551,7 +1551,7 @@ export default function DashboardPage() {
                           setDateTo(e.target.value);
                           setDatePreset("");
                         }}
-                        className="h-8 rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] px-2 text-xs focus:border-[#C9A84C] focus:outline-none"
+                        className="kw-input-sm"
                       />
                     </div>
                   )}
@@ -1566,7 +1566,7 @@ export default function DashboardPage() {
                         <select
                           value={docFilter}
                           onChange={e => setDocFilter(e.target.value)}
-                          className="h-8 rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] px-2 text-xs focus:border-[#C9A84C] focus:outline-none"
+                          className="kw-input-sm"
                         >
                           <option value="all">All statements</option>
                           {documents
@@ -1657,8 +1657,8 @@ export default function DashboardPage() {
 
               {/* ── CASH FLOW: Are we living within our means? ─────────────── */}
               {accountFilter === "all" && (
-                <div className="rounded-2xl border border-[#E4E8F0] bg-white p-6 shadow-sm">
-                  <h3 className="mb-4 text-sm font-bold text-[#1B2A4A]">
+                <div className="kw-card shadow-sm">
+                  <h3 className="mb-4 kw-section-title">
                     Cash Flow — &ldquo;Are we living within our means?&rdquo;
                   </h3>
                   <p className="mb-4 text-xs text-[#9AA5B4]">
@@ -1713,7 +1713,7 @@ export default function DashboardPage() {
                           : "border-red-100 bg-red-50"
                       }`}
                     >
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                      <p className="kw-label">
                         Net
                       </p>
                       <p
@@ -1756,7 +1756,7 @@ export default function DashboardPage() {
                             : "border-red-100 bg-red-50"
                       }`}
                     >
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                      <p className="kw-label">
                         Savings rate
                       </p>
                       <p
@@ -1829,7 +1829,7 @@ export default function DashboardPage() {
                             <p className="text-base font-bold text-[#1B2A4A]">
                               {account.nickname}
                             </p>
-                            <p className="text-xs text-[#9AA5B4]">
+                            <p className="kw-caption">
                               {account.bankName} · ••{account.last4} · {account.ownerName}
                             </p>
                             <span
@@ -1843,7 +1843,7 @@ export default function DashboardPage() {
 
                         {/* Running balance */}
                         <div className="text-right">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                          <p className="kw-label">
                             Running Balance
                           </p>
                           <p
@@ -1910,7 +1910,7 @@ export default function DashboardPage() {
                       {/* This period (respects date filter) */}
                       {(filteredCredits > 0 || filteredDebits > 0) &&
                         filtered.length !== transactions.filter(t => t.accountId === account.id).length && (
-                          <div className="mt-3 rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] px-4 py-3">
+                          <div className="mt-3 kw-card-compact">
                             <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
                               This Period (filtered)
                             </p>
@@ -1973,10 +1973,10 @@ export default function DashboardPage() {
 
               {/* ── HOUSEHOLD DEBT (consolidated: credit cards + loans) ───── */}
               {accountFilter === "all" && (
-                <div className="rounded-2xl border border-[#E4E8F0] bg-white p-5">
+                <div className="kw-card">
                   <div className="mb-4 flex items-start justify-between">
                     <div>
-                      <h3 className="text-sm font-bold text-[#1B2A4A]">Household Debt: Is the hole getting smaller?</h3>
+                      <h3 className="kw-section-title">Household Debt: Is the hole getting smaller?</h3>
                       <p className="mt-0.5 text-[10px] text-[#9AA5B4]">
                         {fmt(consolidatedHouseholdDebt)} total
                         {loans.length > 0 && ` · ${fmt(totalMinPayment)}/mo minimum (loans)`}
@@ -3107,7 +3107,7 @@ export default function DashboardPage() {
                               <span className="flex-1 text-xs font-semibold text-[#1B2A4A]">
                                 {cat.emoji} {cat.name}
                               </span>
-                              <span className="text-xs text-[#9AA5B4]">{pct}%</span>
+                              <span className="kw-caption">{pct}%</span>
                               <span className="w-20 text-right text-xs font-bold text-[#1B2A4A]">
                                 {fmt(cat.value)}
                               </span>
