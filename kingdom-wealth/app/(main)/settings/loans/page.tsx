@@ -46,6 +46,7 @@ export default function SettingsLoansPage() {
       if (loans.length > 0) setHasDebt("yes");
       setLoadingCtx(false);
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user, router]);
 
   // Auto-set hasDebt when loans load
