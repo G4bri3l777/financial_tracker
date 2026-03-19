@@ -96,7 +96,7 @@ export default function SettingsHouseholdPage() {
           )}
         </div>
       </div>
-      <div className="mx-auto max-w-2xl flex-1 space-y-5 px-6 py-6">
+      <div className="mx-auto max-w-2xl flex-1 space-y-5 px-4 py-4 sm:px-6 sm:py-6">
         <section className="rounded-2xl border border-[#E4E8F0] bg-white p-6">
           <h2 className="mb-4 text-sm font-bold text-[#1B2A4A]">Modify household information</h2>
           <div className="mb-4">

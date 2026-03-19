@@ -1049,13 +1049,13 @@ export default function DashboardPage() {
         )}
 
         {/* ── KPI STRIP ─────────────────────────────────────────── */}
-        <div className="shrink-0 border-b border-[#E8ECF0] bg-white px-6 py-5">
+        <div className="shrink-0 border-b border-[#E8ECF0] bg-white px-4 py-4 sm:px-6 sm:py-5">
           
 
           {/* ── FILTER BAR ──────────────────────────────────────── */}
           <div id="filter-bar-root" className="sticky top-14 z-30 border-[#E4E8F0] bg-white">
             {/* Pill row — always visible */}
-            <div className="mx-auto flex max-w-7xl items-center justify-center gap-2 px-10 py-2.5">
+            <div className="flex items-center gap-2 overflow-x-auto px-4 py-2.5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {/* Active filter count badge */}
               {(() => {
                 const count = [
@@ -1623,7 +1623,7 @@ export default function DashboardPage() {
 
         {/* ── TABS ─────────────────────────────────────────────── */}
         <div className="shrink-0 border-b border-[#E8ECF0] bg-white px-6">
-          <div className="flex justify-center gap-6">
+          <div className="flex gap-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {([
               ["overview",      "Overview"],
               ["categories",    "Categories"],
@@ -1637,7 +1637,7 @@ export default function DashboardPage() {
                   if (tab === "transactions") { router.push("/transactions"); return; }
                   setActiveTab(tab);
                 }}
-                className={`border-b-2 pb-3 pt-3 text-sm font-semibold transition ${
+                className={`shrink-0 border-b-2 pb-3 pt-3 text-sm font-semibold transition ${
                   activeTab === tab
                     ? "border-[#C9A84C] text-[#1B2A4A]"
                     : "border-transparent text-[#9AA5B4] hover:text-[#1B2A4A]"
@@ -1650,7 +1650,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ── TAB CONTENT ──────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto p-6 md:p-8">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 md:p-8">
 
           {/* ── OVERVIEW TAB ──────────────────────────────────── */}
           {activeTab === "overview" && (
@@ -1860,7 +1860,7 @@ export default function DashboardPage() {
                       </div>
 
                       {/* Credits / Debits breakdown */}
-                      <div className="mt-4 grid grid-cols-3 gap-3">
+                      <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="rounded-xl bg-green-50 p-3">
                           <p className="text-[10px] font-bold uppercase tracking-wide text-green-600">
                             ↓ Money In
@@ -2026,8 +2026,8 @@ export default function DashboardPage() {
 
                   {/* Debt wheel chart (pastel pie) — click segment to drill into bar + card */}
                   {debtPieData.length > 0 && (
-                    <div className="mb-4 flex flex-wrap items-start gap-6 rounded-xl border border-[#E4E8F0] bg-[#FDFCFA] p-4">
-                      <div className="flex items-center gap-4">
+                    <div className="mb-4 flex flex-wrap items-start gap-6 overflow-hidden w-full rounded-xl border border-[#E4E8F0] bg-[#FDFCFA] p-4">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                         <div className="flex flex-col items-center shrink-0">
                           <div className="h-44 w-44">
                             <ResponsiveContainer width="100%" height="100%">
@@ -2073,8 +2073,8 @@ export default function DashboardPage() {
                             )}
                           </div>
                         </div>
-                        <div className="min-w-0 flex-1 space-y-1">
-                          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9AA5B4]">
+                        <div className="min-w-0 w-full flex-1 space-y-1">
+                          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9AA5B4] truncate">
                             {loanSortMode === "snowball" && "Pay in this order (snowball)"}
                             {loanSortMode === "avalanche" && "Pay in this order (avalanche)"}
                             {loanSortMode === "type" && "Debt breakdown (by type)"}
@@ -2700,7 +2700,7 @@ export default function DashboardPage() {
                     const progressPct = Math.min(100, (monthsOfCoverage / targetMonths) * 100);
                   return (
                     <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+                      <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
                         <div>
                           <p className="text-[10px] font-semibold text-[#9AA5B4]">Avg monthly expenses</p>
                           <p className="font-bold text-[#1B2A4A]">~{fmtFull(avgMonthlyExpenses)}</p>
@@ -3120,7 +3120,7 @@ export default function DashboardPage() {
                   </div>
 
                   {/* Category detail cards */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {categoryData.map(cat => {
                       const catTxns = filtered.filter(t => t.type === "expense" && t.category === cat.name);
                       const subcatMap: Record<string, number> = {};

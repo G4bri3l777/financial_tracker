@@ -188,7 +188,7 @@ export default function SettingsAccountsPage() {
         </p>
       </div>
 
-      <div className="mx-auto max-w-2xl flex-1 space-y-5 px-6 py-6">
+      <div className="mx-auto max-w-2xl flex-1 space-y-5 px-4 py-4 sm:px-6 sm:py-6">
 
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
@@ -227,15 +227,15 @@ export default function SettingsAccountsPage() {
               {accounts.map((acc) => (
                 <li
                   key={acc.id}
-                  className="flex items-center justify-between rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] p-4 transition hover:bg-[#F4F6FA]"
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] p-4 transition hover:bg-[#F4F6FA]"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
                     <div
                       className="h-10 w-10 shrink-0 rounded-full"
                       style={{ backgroundColor: acc.color || "#C9A84C" }}
                     />
                     <div>
-                      <p className="font-semibold text-[#1B2A4A]">{acc.nickname}</p>
+                      <p className="truncate font-semibold text-[#1B2A4A]">{acc.nickname}</p>
                       <p className="text-[10px] text-[#9AA5B4]">{acc.bankName} ••{acc.last4}</p>
                     </div>
                     <span
@@ -276,8 +276,8 @@ export default function SettingsAccountsPage() {
       </div>
 
       {formOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-[#E4E8F0] bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
+          <div className="w-full max-w-md rounded-t-2xl border border-[#E4E8F0] bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto sm:rounded-2xl">
             <h3 className="text-lg font-bold text-[#1B2A4A]">
               {editingAccount ? "Edit account" : "Add account"}
             </h3>

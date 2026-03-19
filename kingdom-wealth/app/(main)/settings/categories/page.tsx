@@ -110,7 +110,7 @@ export default function SettingsCategoriesPage() {
         </p>
       </div>
 
-      <div className="mx-auto max-w-4xl flex-1 space-y-5 px-6 py-6">
+      <div className="mx-auto max-w-4xl flex-1 space-y-5 px-4 py-4 sm:px-6 sm:py-6">
 
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
@@ -132,7 +132,7 @@ export default function SettingsCategoriesPage() {
                     key={category.name}
                     type="button"
                     onClick={() => setSelectedCategory(category.name)}
-                    className={`inline-flex shrink-0 w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-sm md:flex ${
+                    className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-sm ${
                       selected ? "bg-[#C9A84C] font-bold text-[#1B2A4A]" : "bg-[#F4F6FA] font-semibold text-[#1B2A4A]/85 hover:bg-[#E9EDF5]"
                     }`}
                     style={{ borderLeftWidth: 4, borderLeftStyle: "solid", borderLeftColor: getCategoryColor(category.name) }}
@@ -182,7 +182,7 @@ export default function SettingsCategoriesPage() {
                     >
                       <div>
                         {editingSubcatId === subcat.id ? (
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <input
                               value={editingSubcatName}
                               onChange={(e) => setEditingSubcatName(e.target.value)}

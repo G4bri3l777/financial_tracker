@@ -546,7 +546,7 @@ export default function BudgetPage() {
 
       {/* ── HEADER ──────────────────────────────────────── */}
       <div className="shrink-0 border-b border-[#E4E8F0] bg-white px-6 py-4">
-        <div className="mx-auto flex max-w-4xl items-center justify-between">
+        <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             {/* <div className="flex items-center gap-2 text-xs text-[#9AA5B4]">
               <Link href="/dashboard" className="hover:text-[#1B2A4A]">Dashboard</Link>
@@ -555,7 +555,7 @@ export default function BudgetPage() {
             </div> */}
 
             {/* Month navigator */}
-            <div className="mt-1.5 flex items-center gap-3">
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => setBudgetMonth(prevMonth(budgetMonth))}
@@ -575,7 +575,7 @@ export default function BudgetPage() {
               </button>
 
               {/* Mode badge */}
-              <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+              <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
                 isPast    ? "bg-[#F4F6FA] text-[#9AA5B4]"
                 : isCurrent ? "bg-blue-100 text-blue-700"
                 :             "bg-[#FFF8E8] text-[#C9A84C]"
@@ -587,7 +587,7 @@ export default function BudgetPage() {
 
               {/* Budget status */}
               {budget && (
-                <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
                   isApproved ? "bg-green-100 text-green-700"
                   : isPending  ? "bg-amber-100 text-amber-700"
                   :              "bg-[#F4F6FA] text-[#9AA5B4]"
@@ -670,7 +670,7 @@ export default function BudgetPage() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-4xl flex-1 space-y-4 px-6 py-5">
+      <div className="mx-auto max-w-4xl flex-1 space-y-4 px-4 py-4 sm:px-6 sm:py-5">
 
         {/* ── STATS CARD ──────────────────────────────────── */}
         {(() => {
@@ -705,9 +705,9 @@ export default function BudgetPage() {
             : 0;
 
           return (
-            <div className="kw-card">
+            <div className="kw-card overflow-hidden">
               {isCurrent && (
-                <p className="mb-3 text-xs font-semibold text-amber-600">
+                <p className="mb-3 text-xs font-semibold text-amber-600 break-words">
                   📅 Month in progress — figures will update as income and expenses are recorded
                 </p>
               )}
@@ -716,7 +716,7 @@ export default function BudgetPage() {
                   No approved budget for this month — showing actuals only
                 </p>
               )}
-              <div className="mb-4 grid grid-cols-3 gap-4">
+              <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
 
                 {pastWithoutApproved ? (
                   /* Simplified: Actual Received | Actual Expenses | Real Balance */
@@ -875,7 +875,7 @@ export default function BudgetPage() {
         {/* ── APPROVAL STATUS ─────────────────────────── */}
         {!isPast && budget && (
           <div className="rounded-2xl border border-kw-border bg-white px-5 py-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 {(["draft","pending_approval","approved"] as const).map((s, i) => (
                   <div key={s} className="flex items-center gap-2">
@@ -915,7 +915,13 @@ export default function BudgetPage() {
         )}
 
         {/* ── CATEGORY TABLE ───────────────────────────── */}
-        <div className="overflow-hidden rounded-2xl border border-[#E4E8F0] bg-white">
+        <div className="rounded-2xl border border-[#E4E8F0] bg-white">
+          {/* Mobile scroll hint */}
+          <p className="px-4 pt-2 text-[10px] text-[#9AA5B4] sm:hidden">
+            ← Scroll table to see all columns →
+          </p>
+          <div className="overflow-x-auto">
+          <div className="min-w-[640px]">
 
           {/* Column headers */}
           <div className={`grid gap-0 border-b border-[#F4F6FA] px-5 py-2 text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4] ${
@@ -1351,6 +1357,8 @@ export default function BudgetPage() {
 
             {/* 7: Comment — empty */}
             <div />
+          </div>
+          </div>
           </div>
         </div>
 

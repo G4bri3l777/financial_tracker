@@ -118,7 +118,7 @@ export default function SettingsLoansPage() {
         </p>
       </div>
 
-      <div className="mx-auto max-w-2xl flex-1 space-y-5 px-6 py-6">
+      <div className="mx-auto max-w-2xl flex-1 space-y-5 px-4 py-4 sm:px-6 sm:py-6">
 
         {/* Do you have debt? */}
         {hasDebt === "" && loans.length === 0 && (
@@ -237,7 +237,7 @@ export default function SettingsLoansPage() {
                                 </select>
                               </div>
                             </div>
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                               <div>
                                 <label className="mb-1 block text-[10px] font-semibold text-[#9AA5B4]">Balance ($)</label>
                                 <input type="number" min={0} value={draft.balance ?? ""} onChange={e => setDraft(p => ({ ...p, balance: Number(e.target.value) }))}
@@ -352,7 +352,7 @@ export default function SettingsLoansPage() {
                                 </select>
                               </div>
                             </div>
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                               <div>
                                 <label className="mb-1 block text-[10px] font-semibold text-[#9AA5B4]">Balance ($)</label>
                                 <input type="number" min={0} value={draft.balance ?? ""} onChange={e => setDraft(p => ({ ...p, balance: Number(e.target.value) }))}
@@ -413,7 +413,7 @@ export default function SettingsLoansPage() {
                       </select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                     <div>
                       <label className="mb-1 block text-[10px] font-semibold text-[#9AA5B4]">Balance ($)</label>
                       <input type="number" min={0} step="0.01" value={draft.balance ?? ""}

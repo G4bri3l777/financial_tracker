@@ -75,7 +75,16 @@ export default function AppHeader() {
   return (
     <header className="sticky top-0 z-50 h-14 border-b border-kw-border bg-white">
       <div className="flex h-full w-full items-center justify-between px-4">
-        {/* ── LEFT: Logo ──────────────────────────────── */}
+        {/* ── LEFT: Hamburger (mobile) + Logo ─────────── */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-[#1B2A4A] hover:bg-[#F4F6FA] lg:hidden"
+            onClick={() => window.dispatchEvent(new Event("sidebar:open"))}
+            aria-label="Open menu"
+          >
+            ☰
+          </button>
         <Link href="/dashboard" className="flex items-center gap-2.5">
           {/* <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#1B2A4A]">
             <span className="text-sm font-black text-[#C9A84C]">KW</span>
@@ -84,6 +93,7 @@ export default function AppHeader() {
             Kingdom Wealth
           </span>
         </Link>
+        </div>
 
         {/* ── RIGHT: Settings + Avatar ─────────────────── */}
         <div className="flex items-center gap-2">

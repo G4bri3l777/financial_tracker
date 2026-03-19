@@ -285,7 +285,7 @@ export default function SettingsPage() {
 
       {/* Header */}
       <div className="shrink-0 border-b border-[#E4E8F0] bg-white px-6 py-4">
-        <div className="mx-auto flex max-w-2xl items-center justify-between">
+        <div className="mx-auto flex max-w-2xl items-center justify-between gap-2">
           <div className="flex items-center gap-3">
            
             <span className="text-[#E4E8F0]">/</span>
@@ -299,7 +299,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-2xl flex-1 space-y-5 px-6 py-6">
+      <div className="mx-auto max-w-2xl flex-1 space-y-5 px-4 py-4 sm:px-6 sm:py-6">
 
         {/* ── APP NAVIGATION ───────────────────────────────── */}
         <section className="kw-card">
