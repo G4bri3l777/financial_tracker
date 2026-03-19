@@ -22,6 +22,8 @@ import { useAccounts, type AccountSubtype, type AccountType } from "@/app/hooks/
 import { useDocuments } from "@/app/hooks/useDocuments";
 import { useMembers } from "@/app/hooks/useMembers";
 import { useSubcategories } from "@/app/hooks/useSubcategories";
+import OnboardingProgressDots from "@/app/components/OnboardingProgressDots";
+import AddTransactionForm from "@/app/components/AddTransactionForm";
 import {
   CATEGORIES,
   CATEGORY_NAMES,
@@ -94,19 +96,6 @@ type AccountDraft = {
   owner: string;
   ownerName: string;
   color: string;
-};
-
-type NewTransactionForm = {
-  date: string;
-  desc: string;
-  amount: string;
-  type: TransactionType;
-  transferType: "internal" | "external-own" | "external-third-party" | "card-payment" | "";
-  category: string;
-  subcat: string;
-  accountId: string;
-  assignedTo: string;
-  comment: string;
 };
 
 function formatMoney(value: number) {
@@ -703,6 +692,7 @@ export default function OnboardingReviewPage() {
   const { user, loading: authLoading } = useAuth();
 
   const [householdId, setHouseholdId] = useState("");
+  const [userRole, setUserRole] = useState("");
   const [_userOnboardingStep, setUserOnboardingStep] = useState("");
   const [_activeTab, _setActiveTab] = useState<ReviewTab>("transactions");
   const [loadingContext, setLoadingContext] = useState(true);
@@ -720,22 +710,7 @@ export default function OnboardingReviewPage() {
   const [editingAccount, setEditingAccount] = useState<AccountDraft | null>(null);
   const [_savingAccount, setSavingAccount] = useState(false);
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
-  const [savingTransaction, setSavingTransaction] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const [addTransactionError, setAddTransactionError] = useState("");
-  const [shakeAddTransaction, setShakeAddTransaction] = useState(false);
-  const [newTransactionForm, setNewTransactionForm] = useState<NewTransactionForm>({
-    date: toYmd(new Date()),
-    desc: "",
-    amount: "",
-    type: "expense",
-    transferType: "",
-    category: "",
-    subcat: "",
-    accountId: "",
-    assignedTo: "",
-    comment: "",
-  });
   const [_bulkAccountId, _setBulkAccountId] = useState("");
   const [transferSubtypeFilter, _setTransferSubtypeFilter] = useState<TransferSubtypeFilter>("all");
   const [_showTransfersSummary, _setShowTransfersSummary] = useState(false);
@@ -794,6 +769,7 @@ export default function OnboardingReviewPage() {
         if (!userData) throw new Error("Could not find your user profile.");
 
         setUserOnboardingStep(String(userData.onboardingStep ?? "")); // used for guard: loans/complete can revisit
+        setUserRole(String(userData.role ?? ""));
 
         const foundHouseholdId =
           typeof userData.householdId === "string" ? userData.householdId : "";
@@ -959,23 +935,6 @@ export default function OnboardingReviewPage() {
     console.log("accounts loaded:", accounts);
   }, [accounts]);
 
-  const resetNewTransactionForm = () => {
-    setNewTransactionForm({
-      date: toYmd(new Date()),
-      desc: "",
-      amount: "",
-      type: "expense",
-      transferType: "",
-      category: "",
-      subcat: "",
-      accountId: "",
-      assignedTo: user?.uid || "",
-      comment: "",
-    });
-    setAddTransactionError("");
-    setShakeAddTransaction(false);
-  };
-
   const _exportToCSV = (txns: Transaction[], filename: string) => {
     const headers = [
       "Date",
@@ -1037,12 +996,6 @@ export default function OnboardingReviewPage() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
-
-  useEffect(() => {
-    if (!newTransactionForm.assignedTo && user?.uid) {
-      setNewTransactionForm((prev) => ({ ...prev, assignedTo: user.uid }));
-    }
-  }, [newTransactionForm.assignedTo, user]);
 
   useEffect(() => {
     if (!showExportMenu) return;
@@ -1501,79 +1454,6 @@ export default function OnboardingReviewPage() {
       setToastMessage(`Error saving account: ${message}`);
     } finally {
       setSavingAccount(false);
-    }
-  };
-
-  const saveNewTransaction = async () => {
-    if (!householdId || !user) return;
-    const amount = Number.parseFloat(newTransactionForm.amount || "0");
-    if (!newTransactionForm.date || !newTransactionForm.desc.trim() || !(amount > 0)) {
-      setAddTransactionError("Date, merchant, and amount are required.");
-      setShakeAddTransaction(true);
-      window.setTimeout(() => setShakeAddTransaction(false), 350);
-      return;
-    }
-
-    try {
-      setSavingTransaction(true);
-      setAddTransactionError("");
-      const selectedAccount = newTransactionForm.accountId
-        ? accountById.get(newTransactionForm.accountId)
-        : undefined;
-      const selectedMember = members.find((m) => m.uid === newTransactionForm.assignedTo);
-      const assignedTo = newTransactionForm.assignedTo || user.uid;
-      const assignedToName =
-        assignedTo === "joint"
-          ? "Joint"
-          : selectedMember?.firstName ||
-            memberNameByUid.get(assignedTo)?.split(" ")[0] ||
-            user.displayName?.split(" ")[0] ||
-            "Member";
-
-      const shouldShowCategory =
-        newTransactionForm.type !== "transfer" ||
-        newTransactionForm.transferType === "external-third-party";
-      const payload = {
-        date: newTransactionForm.date,
-        desc: newTransactionForm.desc.trim(),
-        merchantName: newTransactionForm.desc.trim(),
-        month: newTransactionForm.date.slice(0, 7),
-        amount,
-        type: newTransactionForm.type,
-        direction: (newTransactionForm.type === "income" || newTransactionForm.type === "refund")
-          ? "credit" : "debit",
-        transferType:
-          newTransactionForm.type === "transfer"
-            ? newTransactionForm.transferType || null
-            : null,
-        category: shouldShowCategory ? newTransactionForm.category || null : null,
-        subcat: shouldShowCategory ? newTransactionForm.subcat || null : null,
-        accountId: selectedAccount?.id || null,
-        accountLabel: selectedAccount
-          ? `${selectedAccount.bankName} ••${selectedAccount.last4}`
-          : null,
-        assignedTo,
-        assignedToName,
-        comment: newTransactionForm.comment.trim() || null,
-        reviewed: false,
-        flagged: false,
-        addedManually: true,
-        createdAt: serverTimestamp(),
-      };
-
-      await addDoc(collection(db, "households", householdId, "transactions"), payload);
-      setToastMessage(
-        `✅ ${newTransactionForm.desc.trim()} — ${formatMoney(amount)} added`,
-      );
-      setShowAddTransactionModal(false);
-      resetNewTransactionForm();
-    } catch (saveError) {
-      const message =
-        saveError instanceof Error ? saveError.message : "Could not save transaction.";
-      setAddTransactionError(`Error saving transaction: ${message}`);
-      setToastMessage(`Error saving transaction: ${message}`);
-    } finally {
-      setSavingTransaction(false);
     }
   };
 
@@ -2153,7 +2033,11 @@ export default function OnboardingReviewPage() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F4F6FA] text-[#1B2A4A]">
-      <header className="flex shrink-0 items-center gap-4 border-b border-[#E4E8F0] bg-white px-5 py-3">
+      <header className="shrink-0 border-b border-[#E4E8F0] bg-white">
+        <div className="px-5 pt-3 pb-1">
+          <OnboardingProgressDots currentStep="Review" userRole={userRole} />
+        </div>
+        <div className="flex items-center gap-4 px-5 py-3">
         <div className="flex items-center gap-3">
           <h1 className="text-base font-bold text-[#1B2A4A]">Review Transactions</h1>
           <span className="rounded-full bg-[#FFF8E8] px-3 py-0.5 text-xs font-semibold text-[#C9A84C]">
@@ -2211,10 +2095,7 @@ export default function OnboardingReviewPage() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              resetNewTransactionForm();
-              setShowAddTransactionModal(true);
-            }}
+            onClick={() => setShowAddTransactionModal(true)}
             className="rounded-lg bg-[#C9A84C] px-3 py-1.5 text-xs font-semibold text-[#1B2A4A] hover:brightness-95"
           >
             + Add
@@ -2238,6 +2119,7 @@ export default function OnboardingReviewPage() {
           >
             Skip for now →
           </button>
+        </div>
         </div>
       </header>
 
@@ -3269,84 +3151,32 @@ export default function OnboardingReviewPage() {
         </div>
       )}
 
-      {showAddTransactionModal ? (
+      {showAddTransactionModal && householdId && user ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" style={{ backdropFilter: "blur(4px)" }}>
-          <div
-            className="w-full max-w-[480px] rounded-[20px] bg-white p-7 shadow-[0_20px_60px_rgba(27,42,74,0.15)]"
-            style={{ animation: shakeAddTransaction ? "kw-shake 0.25s ease-in-out 2" : undefined }}
-          >
-            <style jsx>{`
-              @keyframes kw-shake {
-                0% { transform: translateX(0); }
-                25% { transform: translateX(-6px); }
-                50% { transform: translateX(6px); }
-                75% { transform: translateX(-4px); }
-                100% { transform: translateX(0); }
-              }
-            `}</style>
-            <div className="flex items-start justify-between">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-[#E4E8F0] bg-white p-6 shadow-[0_20px_60px_rgba(27,42,74,0.15)]">
+            <div className="flex items-start justify-between mb-4">
               <h3 className="text-2xl font-semibold text-[#1B2A4A]">Add Transaction</h3>
-              <button type="button" onClick={() => { setShowAddTransactionModal(false); resetNewTransactionForm(); }} className="text-lg text-[#1B2A4A]/70">×</button>
-            </div>
-            <div className="mt-4 space-y-3">
-              <label className="block">
-                <span className="mb-1 block text-[10px] uppercase tracking-wide text-[#9AA5B4]">Date</span>
-                <input type="date" value={newTransactionForm.date}
-                  onChange={e => setNewTransactionForm(p => ({ ...p, date: e.target.value }))}
-                  className="h-10 w-full rounded-lg border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none" />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-[10px] uppercase tracking-wide text-[#9AA5B4]">Merchant</span>
-                <input value={newTransactionForm.desc}
-                  onChange={e => setNewTransactionForm(p => ({ ...p, desc: e.target.value }))}
-                  placeholder="e.g. Wegmans, Amazon" className="h-10 w-full rounded-lg border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none" />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-[10px] uppercase tracking-wide text-[#9AA5B4]">Amount</span>
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#1B2A4A]/70">$</span>
-                  <input type="number" min={0} step="0.01" value={newTransactionForm.amount}
-                    onChange={e => setNewTransactionForm(p => ({ ...p, amount: e.target.value }))}
-                    placeholder="0.00" className="h-10 w-full rounded-lg border border-[#E4E8F0] bg-white px-3 pl-7 text-sm focus:border-[#C9A84C] focus:outline-none" />
-                </div>
-              </label>
-              <div>
-                <span className="mb-1 block text-[10px] uppercase tracking-wide text-[#9AA5B4]">Type</span>
-                <div className="flex flex-wrap gap-2">
-                  {(["income","expense","transfer","refund"] as TransactionType[]).map(v => (
-                    <button key={v} type="button"
-                      onClick={() => setNewTransactionForm(p => ({ ...p, type: v }))}
-                      className={`rounded-lg border px-3 py-1 text-xs font-semibold capitalize ${newTransactionForm.type === v ? "border-[#C9A84C] bg-[#C9A84C] text-white" : "border-[#E4E8F0] bg-white text-[#1B2A4A]"}`}>
-                      {v}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <label className="block">
-                <span className="mb-1 block text-[10px] uppercase tracking-wide text-[#9AA5B4]">Account</span>
-                <select value={newTransactionForm.accountId}
-                  onChange={e => setNewTransactionForm(p => ({ ...p, accountId: e.target.value }))}
-                  className="h-10 w-full rounded-lg border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none">
-                  <option value="">No account</option>
-                  {accounts.map(a => <option key={a.id} value={a.id}>{a.nickname} ••{a.last4}</option>)}
-                </select>
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-[10px] uppercase tracking-wide text-[#9AA5B4]">Comment</span>
-                <input value={newTransactionForm.comment}
-                  onChange={e => setNewTransactionForm(p => ({ ...p, comment: e.target.value }))}
-                  placeholder="Optional note..." className="h-10 w-full rounded-lg border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none" />
-              </label>
-              {addTransactionError && <p className="text-xs font-medium text-red-600">{addTransactionError}</p>}
-              <button type="button" onClick={() => void saveNewTransaction()} disabled={savingTransaction}
-                className="h-11 w-full rounded-lg bg-[#C9A84C] text-sm font-semibold text-[#1B2A4A] disabled:opacity-60">
-                {savingTransaction ? "Saving..." : "Save Transaction"}
-              </button>
-              <button type="button" onClick={() => { setShowAddTransactionModal(false); resetNewTransactionForm(); }}
-                className="h-10 w-full rounded-lg border border-[#E4E8F0] text-sm font-semibold text-[#1B2A4A]">
-                Cancel
+              <button
+                type="button"
+                onClick={() => setShowAddTransactionModal(false)}
+                className="text-lg text-[#1B2A4A]/70 hover:text-[#1B2A4A]"
+              >
+                ×
               </button>
             </div>
+            <AddTransactionForm
+              householdId={householdId}
+              user={user}
+              accounts={accounts}
+              members={members}
+              subcatsByParent={subcatsByParent}
+              defaultAssignedTo={user.uid}
+              onSaved={(result) => {
+                setToastMessage(result.message);
+                if (result.success) setShowAddTransactionModal(false);
+              }}
+              onCancel={() => setShowAddTransactionModal(false)}
+            />
           </div>
         </div>
       ) : null}

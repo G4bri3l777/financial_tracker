@@ -8,6 +8,7 @@ import {
 } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { useAuth } from "@/app/hooks/useAuth";
+import OnboardingProgressDots from "@/app/components/OnboardingProgressDots";
 import { useAccounts, type AccountType, type AccountSubtype } from "@/app/hooks/useAccounts";
 import { useDocuments } from "@/app/hooks/useDocuments";
 import { db, storage } from "@/app/lib/firebase";
@@ -322,28 +323,7 @@ export default function OnboardingAccountsPage() {
       {/* Header */}
       <div className="border-b border-[#E4E8F0] bg-white px-6 py-5">
         <div className="mx-auto max-w-2xl">
-          {/* Progress dots */}
-          <div className="mb-4 flex items-center gap-2">
-            {["Profile","Household", userRole === "admin" ? "Invite" : null,"Accounts","Review","Loans"].filter(Boolean).map((step, i, arr) => (
-              <div key={String(step)} className="flex items-center gap-2">
-                <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${
-                  step === "Accounts"
-                    ? "bg-[#C9A84C] text-white"
-                    : i < (arr.indexOf("Accounts") ?? 0)
-                      ? "bg-[#1B2A4A] text-white"
-                      : "bg-[#E4E8F0] text-[#9AA5B4]"
-                }`}>
-                  {i < (arr.indexOf("Accounts") ?? 0) ? "✓" : i + 1}
-                </div>
-                <span className={`text-[10px] font-semibold ${
-                  step === "Accounts" ? "text-[#C9A84C]" : "text-[#9AA5B4]"
-                }`}>{step}</span>
-                {i < arr.length - 1 && (
-                  <div className="h-px w-6 bg-[#E4E8F0]" />
-                )}
-              </div>
-            ))}
-          </div>
+          <OnboardingProgressDots currentStep="Accounts" userRole={userRole} />
           <h1 className="text-2xl font-bold text-[#1B2A4A]">Your Accounts & Cards</h1>
           <p className="mt-1 text-sm text-[#9AA5B4]">
             Add every bank account and credit card. We&apos;ll match your uploaded statements to these.

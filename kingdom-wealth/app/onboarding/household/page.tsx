@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../hooks/useAuth";
+import OnboardingProgressDots from "@/app/components/OnboardingProgressDots";
 import { db } from "@/app/lib/firebase";
 import {
   addDoc,
@@ -186,8 +187,8 @@ export default function OnboardingHouseholdPage() {
 
   if (authLoading || !guardChecked) {
     return (
-      <div className="min-h-screen bg-white px-4 py-8 text-[#1B2A4A] md:px-6 lg:px-8">
-        <div className="mx-auto w-full max-w-lg">Loading...</div>
+      <div className="flex min-h-screen items-center justify-center bg-[#F4F6FA]">
+        <p className="text-sm text-[#1B2A4A]/40">Loading...</p>
       </div>
     );
   }
@@ -197,33 +198,35 @@ export default function OnboardingHouseholdPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white px-4 py-8 text-[#1B2A4A] md:bg-[#F4F6FA] md:px-6 lg:px-8">
-      <div className="mx-auto w-full max-w-lg">
-        <main className="space-y-6 md:rounded-2xl md:bg-white md:p-8 md:shadow-xl">
-          <section className="space-y-3">
-            <div className="flex items-center justify-between text-sm font-medium">
-              <span>Step 2 of 3</span>
-              <span className="text-[#1B2A4A]/70">Household</span>
-            </div>
-            <div className="h-2 w-full rounded-full bg-[#F4F6FA]">
-              <div className="h-2 w-2/3 rounded-full bg-[#C9A84C]" />
-            </div>
-          </section>
+    <div className="min-h-screen bg-[#F4F6FA] text-[#1B2A4A]">
+      {/* Header */}
+      <div className="border-b border-[#E4E8F0] bg-white px-6 py-5">
+        <div className="mx-auto max-w-2xl">
+          <OnboardingProgressDots currentStep="Household" userRole={role ?? ""} />
+          <h1 className="text-2xl font-bold text-[#1B2A4A]">
+            {role === "member" ? "Your household" : "Set up your household"}
+          </h1>
+          <p className="mt-1 text-sm text-[#9AA5B4]">
+            {role === "member"
+              ? `You're joining ${householdName || "your household"}`
+              : "This is your shared financial space"}
+          </p>
+        </div>
+      </div>
 
-          <section className="space-y-2">
-            <h1 className="text-3xl font-bold md:text-4xl">
-              {role === "member" ? "Your household" : "Set up your household"}
-            </h1>
-            <p className="text-sm text-[#1B2A4A]/75 md:text-base">
-              {role === "member"
-                ? `You're joining ${householdName || "your household"}`
-                : "This is your shared financial space"}
-            </p>
-          </section>
+      <div className="mx-auto max-w-2xl space-y-5 px-6 py-8">
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {error}
+          </div>
+        )}
 
+        <section className="rounded-2xl border border-[#E4E8F0] bg-white p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium">Household name</span>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                Household name
+              </label>
               <input
                 type="text"
                 name="householdName"
@@ -232,18 +235,20 @@ export default function OnboardingHouseholdPage() {
                 onChange={(event) => setHouseholdName(event.target.value)}
                 disabled={fetchingHousehold || saving}
                 required
-                className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] px-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
+                className="h-10 w-full rounded-xl border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none"
               />
-            </label>
+            </div>
 
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium">Country</span>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                Country
+              </label>
               <select
                 name="country"
                 value={country}
                 onChange={(event) => setCountry(event.target.value)}
                 disabled={fetchingHousehold || saving}
-                className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] px-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
+                className="h-10 w-full rounded-xl border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none"
               >
                 {countries.map((countryOption) => (
                   <option key={countryOption} value={countryOption}>
@@ -251,32 +256,28 @@ export default function OnboardingHouseholdPage() {
                   </option>
                 ))}
               </select>
-            </label>
+            </div>
 
-            {fetchingHousehold ? (
-              <p className="text-sm text-[#1B2A4A]/70">Loading saved household...</p>
-            ) : null}
-
-            {error ? <p className="text-sm font-medium text-red-600">{error}</p> : null}
+            {fetchingHousehold && (
+              <p className="text-sm text-[#9AA5B4]">Loading saved household...</p>
+            )}
 
             <button
               type="submit"
               disabled={saving || fetchingHousehold}
-              className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#C9A84C] px-5 text-base font-semibold text-[#1B2A4A] transition hover:brightness-95"
+              className="w-full rounded-xl bg-[#C9A84C] py-2.5 text-sm font-bold text-[#1B2A4A] disabled:opacity-50"
             >
               {saving ? "Saving..." : "Continue"}
             </button>
           </form>
+        </section>
 
-          <footer>
-            <Link
-              href="/onboarding/profile"
-              className="text-sm font-semibold text-[#1B2A4A]/80 underline underline-offset-2"
-            >
-              ← Back
-            </Link>
-          </footer>
-        </main>
+        <Link
+          href="/onboarding/profile"
+          className="block text-sm font-semibold text-[#9AA5B4] hover:text-[#1B2A4A]"
+        >
+          ← Back
+        </Link>
       </div>
     </div>
   );

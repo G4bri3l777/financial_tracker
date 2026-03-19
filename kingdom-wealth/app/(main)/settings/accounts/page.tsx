@@ -167,30 +167,28 @@ export default function SettingsAccountsPage() {
 
   if (authLoading || loadingContext) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-[#F4F6FA] p-8">
-        <p className="text-sm text-[#1B2A4A]/60">Loading...</p>
+      <div className="flex h-screen items-center justify-center bg-[#F4F6FA]">
+        <p className="text-sm text-[#1B2A4A]/40">Loading...</p>
       </div>
     );
   }
   if (!user) return null;
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#F4F6FA] px-4 py-8 text-[#1B2A4A] md:px-6 lg:px-8">
-      <div className="mx-auto max-w-3xl space-y-5">
-        <section className="rounded-2xl border border-[#E8ECF0] bg-white p-5 shadow-sm md:p-6">
-          <h1 className="text-2xl font-bold md:text-3xl">Accounts</h1>
-          <p className="mt-1 text-sm text-[#1B2A4A]/70">
-            Manage your accounts and set their type (savings, checking, credit, etc.)
-          </p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <Link href="/dashboard" className="inline-block text-sm font-semibold text-[#1B2A4A]/80 underline underline-offset-2 hover:text-[#1B2A4A]">
-              ← Back to Overview
-            </Link>
-            <Link href="/settings/categories" className="inline-block text-sm font-semibold text-[#1B2A4A]/80 underline underline-offset-2 hover:text-[#1B2A4A]">
-              Categories
-            </Link>
-          </div>
-        </section>
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#F4F6FA] text-[#1B2A4A]">
+      {/* Header */}
+      <div className="shrink-0 border-b border-[#E4E8F0] bg-white px-6 py-4">
+        <div className="mx-auto flex max-w-2xl items-center gap-3">
+          <Link href="/settings" className="text-xs text-[#9AA5B4] hover:text-[#1B2A4A]">← Settings</Link>
+          <span className="text-[#E4E8F0]">/</span>
+          <h1 className="text-xl font-bold text-[#1B2A4A]">Accounts & Cards</h1>
+        </div>
+        <p className="mx-auto mt-1 max-w-2xl text-xs text-[#9AA5B4]">
+          Manage your bank accounts and set their type (savings, checking, credit, etc.)
+        </p>
+      </div>
+
+      <div className="mx-auto max-w-2xl flex-1 space-y-5 px-6 py-6">
 
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
@@ -198,106 +196,227 @@ export default function SettingsAccountsPage() {
           </div>
         )}
 
-        <section className="rounded-2xl border border-[#E8ECF0] bg-white p-5 shadow-sm md:p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Your accounts</h2>
-            <button type="button" onClick={beginAdd} className="inline-flex h-10 items-center justify-center rounded-lg bg-[#C9A84C] px-4 text-sm font-semibold text-[#1B2A4A] transition hover:brightness-95">
+        <section className="rounded-2xl border border-[#E4E8F0] bg-white p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-sm font-bold text-[#1B2A4A]">Your accounts</h2>
+            <button
+              type="button"
+              onClick={beginAdd}
+              className="rounded-xl bg-[#C9A84C] px-4 py-2.5 text-sm font-bold text-[#1B2A4A] hover:brightness-95"
+            >
               + Add account
             </button>
           </div>
 
           {loading ? (
-            <p className="mt-6 text-sm text-[#9AA5B4]">Loading accounts...</p>
+            <p className="text-sm text-[#9AA5B4]">Loading accounts...</p>
           ) : accounts.length === 0 ? (
-            <div className="mt-6 rounded-xl border border-dashed border-[#E8ECF0] bg-[#FAFBFC] p-8 text-center">
-              <p className="text-sm font-medium text-[#1B2A4A]/75">No accounts yet</p>
-              <p className="mt-1 text-xs text-[#9AA5B4]">Add your first account and set it as savings or checking</p>
-              <button type="button" onClick={beginAdd} className="mt-4 inline-flex h-10 items-center justify-center rounded-lg border border-[#C9A84C] px-4 text-sm font-semibold text-[#1B2A4A] hover:bg-[#FFF8E8]">
+            <div className="rounded-xl border-2 border-dashed border-[#E4E8F0] bg-[#F9FAFC] p-8 text-center">
+              <p className="text-sm font-semibold text-[#1B2A4A]">No accounts yet</p>
+              <p className="mt-1 text-[10px] text-[#9AA5B4]">Add your first account and set it as savings or checking</p>
+              <button
+                type="button"
+                onClick={beginAdd}
+                className="mt-4 rounded-xl border border-[#C9A84C] bg-white px-6 py-2.5 text-sm font-bold text-[#1B2A4A] hover:bg-[#FFF8E8]"
+              >
                 + Add account
               </button>
             </div>
           ) : (
-            <ul className="mt-4 space-y-2">
+            <ul className="space-y-2">
               {accounts.map((acc) => (
-                <li key={acc.id} className="flex items-center justify-between rounded-xl border border-[#E8ECF0] bg-[#FAFBFC] p-4 transition hover:bg-[#F4F6FA]">
+                <li
+                  key={acc.id}
+                  className="flex items-center justify-between rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] p-4 transition hover:bg-[#F4F6FA]"
+                >
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 shrink-0 rounded-full" style={{ backgroundColor: acc.color || "#C9A84C" }} />
+                    <div
+                      className="h-10 w-10 shrink-0 rounded-full"
+                      style={{ backgroundColor: acc.color || "#C9A84C" }}
+                    />
                     <div>
                       <p className="font-semibold text-[#1B2A4A]">{acc.nickname}</p>
-                      <p className="text-xs text-[#9AA5B4]">{acc.bankName} ••{acc.last4}</p>
+                      <p className="text-[10px] text-[#9AA5B4]">{acc.bankName} ••{acc.last4}</p>
                     </div>
-                    <span className={`ml-2 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                      acc.type === "savings" ? "bg-emerald-100 text-emerald-800" :
-                      acc.type === "checking" ? "bg-blue-100 text-blue-800" :
-                      acc.type === "credit" ? "bg-amber-100 text-amber-800" : "bg-[#E8ECF0] text-[#1B2A4A]/70"
-                    }`}>
+                    <span
+                      className={`ml-2 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
+                        acc.type === "savings"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : acc.type === "checking"
+                            ? "bg-blue-100 text-blue-800"
+                            : acc.type === "credit"
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-[#E4E8F0] text-[#1B2A4A]/70"
+                      }`}
+                    >
                       {getTypeLabel(acc.type)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => beginEdit(acc)} className="rounded-lg border border-[#E8ECF0] bg-white px-3 py-1.5 text-xs font-semibold text-[#1B2A4A] hover:bg-[#F4F6FA]">Edit</button>
-                    <button type="button" onClick={() => void deleteAccount(acc)} className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50">Delete</button>
+                    <button
+                      type="button"
+                      onClick={() => beginEdit(acc)}
+                      className="rounded-xl border border-[#E4E8F0] bg-white px-3 py-1.5 text-xs font-semibold text-[#1B2A4A] hover:bg-[#F4F6FA]"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void deleteAccount(acc)}
+                      className="rounded-xl border border-red-100 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
                   </div>
                 </li>
               ))}
             </ul>
           )}
         </section>
+      </div>
 
-        {formOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1B2A4A]/40 p-4">
-            <div className="w-full max-w-md rounded-2xl border border-[#E8ECF0] bg-white p-6 shadow-xl">
-              <h3 className="text-lg font-bold text-[#1B2A4A]">{editingAccount ? "Edit account" : "Add account"}</h3>
-              <div className="mt-4 space-y-4">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-[#9AA5B4]">Nickname</label>
-                  <input value={form.nickname} onChange={(e) => setForm((f) => ({ ...f, nickname: e.target.value }))} placeholder="e.g. Main Checking" className="h-10 w-full rounded-lg border border-[#E8ECF0] bg-white px-3 text-sm text-[#1B2A4A] focus:border-[#C9A84C] focus:outline-none" />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-[#9AA5B4]">Bank name</label>
-                  <input value={form.bankName} onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))} placeholder="e.g. Chase, Wells Fargo" className="h-10 w-full rounded-lg border border-[#E8ECF0] bg-white px-3 text-sm text-[#1B2A4A] focus:border-[#C9A84C] focus:outline-none" />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-[#9AA5B4]">Last 4 digits</label>
-                  <input value={form.last4} onChange={(e) => setForm((f) => ({ ...f, last4: e.target.value.replace(/\D/g, "").slice(0, 4) }))} placeholder="1234" maxLength={4} className="h-10 w-full rounded-lg border border-[#E8ECF0] bg-white px-3 text-sm text-[#1B2A4A] focus:border-[#C9A84C] focus:outline-none" />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-[#9AA5B4]">Account type</label>
-                  <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as AccountType }))} className="h-10 w-full rounded-lg border border-[#E8ECF0] bg-white px-3 text-sm text-[#1B2A4A] focus:border-[#C9A84C] focus:outline-none">
-                    {ACCOUNT_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                  </select>
-                  <p className="mt-0.5 text-[10px] text-[#9AA5B4]">Savings & checking are used for liquid funds and emergency fund</p>
-                </div>
-                {form.type === "credit" && (
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-[#9AA5B4]">Credit limit</label>
-                    <input type="number" value={form.creditLimit} onChange={(e) => setForm((f) => ({ ...f, creditLimit: e.target.value }))} placeholder="0" className="h-10 w-full rounded-lg border border-[#E8ECF0] bg-white px-3 text-sm text-[#1B2A4A] focus:border-[#C9A84C] focus:outline-none" />
-                  </div>
-                )}
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-[#9AA5B4]">Owner</label>
-                  <select value={form.owner} onChange={(e) => setForm((f) => ({ ...f, owner: e.target.value, ownerName: e.target.value === "joint" ? "Joint" : memberNameByUid.get(e.target.value) || "Member" }))} className="h-10 w-full rounded-lg border border-[#E8ECF0] bg-white px-3 text-sm text-[#1B2A4A] focus:border-[#C9A84C] focus:outline-none">
-                    <option value="joint">Joint</option>
-                    {members.map((m) => <option key={m.uid} value={m.uid}>{m.firstName || m.displayName || "Member"}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-[#9AA5B4]">Color</label>
-                  <div className="flex gap-2">
-                    {ACCOUNT_COLORS.map((c) => (
-                      <button key={c} type="button" onClick={() => setForm((f) => ({ ...f, color: c }))} className={`h-8 w-8 rounded-full transition ${form.color === c ? "ring-2 ring-[#1B2A4A] ring-offset-2" : ""}`} style={{ backgroundColor: c }} />
-                    ))}
-                  </div>
-                </div>
+      {formOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-[#E4E8F0] bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-bold text-[#1B2A4A]">
+              {editingAccount ? "Edit account" : "Add account"}
+            </h3>
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                  Nickname
+                </label>
+                <input
+                  value={form.nickname}
+                  onChange={(e) => setForm((f) => ({ ...f, nickname: e.target.value }))}
+                  placeholder="e.g. Main Checking"
+                  className="h-10 w-full rounded-xl border border-[#E4E8F0] bg-white px-3 text-sm text-[#1B2A4A] focus:border-[#C9A84C] focus:outline-none"
+                />
               </div>
-              <div className="mt-6 flex gap-3">
-                <button type="button" onClick={() => { resetForm(); setFormOpen(false); }} className="flex-1 rounded-lg border border-[#E8ECF0] px-4 py-2.5 text-sm font-semibold text-[#1B2A4A] hover:bg-[#F4F6FA]">Cancel</button>
-                <button type="button" onClick={() => void saveAccount()} disabled={saving} className="flex-1 rounded-lg bg-[#C9A84C] px-4 py-2.5 text-sm font-semibold text-[#1B2A4A] hover:brightness-95 disabled:opacity-60">{saving ? "Saving..." : editingAccount ? "Update" : "Add"}</button>
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                  Bank name
+                </label>
+                <input
+                  value={form.bankName}
+                  onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))}
+                  placeholder="e.g. Chase, Wells Fargo"
+                  className="h-10 w-full rounded-xl border border-[#E4E8F0] bg-white px-3 text-sm text-[#1B2A4A] focus:border-[#C9A84C] focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                  Last 4 digits
+                </label>
+                <input
+                  value={form.last4}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, last4: e.target.value.replace(/\D/g, "").slice(0, 4) }))
+                  }
+                  placeholder="1234"
+                  maxLength={4}
+                  className="h-10 w-full rounded-xl border border-[#E4E8F0] bg-white px-3 text-sm text-[#1B2A4A] focus:border-[#C9A84C] focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                  Account type
+                </label>
+                <select
+                  value={form.type}
+                  onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as AccountType }))}
+                  className="h-10 w-full rounded-xl border border-[#E4E8F0] bg-white px-3 text-sm text-[#1B2A4A] focus:border-[#C9A84C] focus:outline-none"
+                >
+                  {ACCOUNT_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[10px] text-[#9AA5B4]">
+                  Savings & checking are used for liquid funds and emergency fund
+                </p>
+              </div>
+              {form.type === "credit" && (
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                    Credit limit
+                  </label>
+                  <input
+                    type="number"
+                    value={form.creditLimit}
+                    onChange={(e) => setForm((f) => ({ ...f, creditLimit: e.target.value }))}
+                    placeholder="0"
+                    className="h-10 w-full rounded-xl border border-[#E4E8F0] bg-white px-3 text-sm text-[#1B2A4A] focus:border-[#C9A84C] focus:outline-none"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                  Owner
+                </label>
+                <select
+                  value={form.owner}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      owner: e.target.value,
+                      ownerName:
+                        e.target.value === "joint" ? "Joint" : memberNameByUid.get(e.target.value) || "Member",
+                    }))
+                  }
+                  className="h-10 w-full rounded-xl border border-[#E4E8F0] bg-white px-3 text-sm text-[#1B2A4A] focus:border-[#C9A84C] focus:outline-none"
+                >
+                  <option value="joint">Joint</option>
+                  {members.map((m) => (
+                    <option key={m.uid} value={m.uid}>
+                      {m.firstName || m.displayName || "Member"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+                  Color
+                </label>
+                <div className="flex gap-2">
+                  {ACCOUNT_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, color: c }))}
+                      className={`h-8 w-8 rounded-full transition ${
+                        form.color === c ? "ring-2 ring-[#1B2A4A] ring-offset-2" : ""
+                      }`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  resetForm();
+                  setFormOpen(false);
+                }}
+                className="flex-1 rounded-xl border border-[#E4E8F0] px-4 py-2.5 text-sm font-semibold text-[#9AA5B4] hover:bg-[#F4F6FA]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveAccount()}
+                disabled={saving}
+                className="flex-1 rounded-xl bg-[#C9A84C] px-4 py-2.5 text-sm font-bold text-[#1B2A4A] disabled:opacity-50"
+              >
+                {saving ? "Saving..." : editingAccount ? "Update" : "Add"}
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

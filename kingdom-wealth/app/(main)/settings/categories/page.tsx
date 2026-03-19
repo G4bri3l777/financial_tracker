@@ -89,29 +89,40 @@ export default function SettingsCategoriesPage() {
 
   if (authLoading || loadingContext) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-[#F4F6FA] p-8">
-        <p className="text-sm text-[#1B2A4A]/60">Loading...</p>
+      <div className="flex h-screen items-center justify-center bg-[#F4F6FA]">
+        <p className="text-sm text-[#1B2A4A]/40">Loading...</p>
       </div>
     );
   }
   if (!user) return null;
 
   return (
-    <div className="flex-1 overflow-y-auto bg-white px-4 py-8 text-[#1B2A4A] md:bg-[#F4F6FA] md:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl space-y-5">
-        <section className="rounded-2xl bg-white p-5 shadow-md ring-1 ring-[#1B2A4A]/10 md:p-6">
-          <h1 className="text-3xl font-bold md:text-4xl">Categories & Subcategories</h1>
-          <p className="mt-2 text-sm text-[#1B2A4A]/75">Shared with your household</p>
-          <Link href="/dashboard" className="mt-3 inline-block text-sm font-semibold text-[#1B2A4A]/80 underline underline-offset-2">
-            ← Back to Overview
-          </Link>
-        </section>
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#F4F6FA] text-[#1B2A4A]">
+      {/* Header */}
+      <div className="shrink-0 border-b border-[#E4E8F0] bg-white px-6 py-4">
+        <div className="mx-auto flex max-w-4xl items-center gap-3">
+          <Link href="/settings" className="text-xs text-[#9AA5B4] hover:text-[#1B2A4A]">← Settings</Link>
+          <span className="text-[#E4E8F0]">/</span>
+          <h1 className="text-xl font-bold text-[#1B2A4A]">Categories</h1>
+        </div>
+        <p className="mx-auto mt-1 max-w-4xl text-xs text-[#9AA5B4]">
+          Edit spending categories. Shared with your household.
+        </p>
+      </div>
 
-        {error ? <p className="text-sm font-medium text-red-600">{error}</p> : null}
+      <div className="mx-auto max-w-4xl flex-1 space-y-5 px-6 py-6">
+
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {error}
+          </div>
+        )}
 
         <section className="grid gap-4 md:grid-cols-3">
-          <aside className="rounded-2xl bg-white p-4 shadow-md ring-1 ring-[#1B2A4A]/10 md:col-span-1">
-            <h2 className="mb-3 text-sm font-semibold">Parent Categories</h2>
+          <aside className="rounded-2xl border border-[#E4E8F0] bg-white p-5 md:col-span-1">
+            <h2 className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+              Parent Categories
+            </h2>
             <div className="flex gap-2 overflow-x-auto pb-2 md:block md:space-y-2 md:overflow-visible">
               {CATEGORIES.map((category) => {
                 const count = category.subcategories.length + subcategories.filter((s) => s.parentCategory === category.name).length;
@@ -121,62 +132,98 @@ export default function SettingsCategoriesPage() {
                     key={category.name}
                     type="button"
                     onClick={() => setSelectedCategory(category.name)}
-                    className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-sm md:flex md:w-full md:justify-between md:rounded-xl ${
-                      selected ? "bg-[#C9A84C] text-[#1B2A4A]" : "bg-[#F4F6FA] text-[#1B2A4A]/85 hover:bg-[#E9EDF5]"
+                    className={`inline-flex shrink-0 w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-sm md:flex ${
+                      selected ? "bg-[#C9A84C] font-bold text-[#1B2A4A]" : "bg-[#F4F6FA] font-semibold text-[#1B2A4A]/85 hover:bg-[#E9EDF5]"
                     }`}
-                    style={{ borderLeft: `4px solid ${getCategoryColor(category.name)}` }}
+                    style={{ borderLeftWidth: 4, borderLeftStyle: "solid", borderLeftColor: getCategoryColor(category.name) }}
                   >
                     <span className="text-left">{category.emoji} {category.name}</span>
-                    <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs">{count}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${selected ? "bg-white/70 text-[#1B2A4A]" : "bg-[#E4E8F0]/80 text-[#9AA5B4]"}`}>{count}</span>
                   </button>
                 );
               })}
             </div>
           </aside>
 
-          <div className="rounded-2xl bg-white p-4 shadow-md ring-1 ring-[#1B2A4A]/10 md:col-span-2">
-            <h2 className="text-lg font-semibold">{selectedCategoryMeta?.emoji} {selectedCategory}</h2>
-            <p className="mt-1 text-sm text-[#1B2A4A]/70">
+          <div className="rounded-2xl border border-[#E4E8F0] bg-white p-6 md:col-span-2">
+            <h2 className="text-sm font-bold text-[#1B2A4A]">
+              {selectedCategoryMeta?.emoji} {selectedCategory}
+            </h2>
+            <p className="mt-1 text-[10px] text-[#9AA5B4]">
               {selectedCategoryMeta?.description ? `${selectedCategoryMeta.description} • ` : ""}
               {loading ? "Syncing..." : `${selectedSubcats.length} subcategories`}
             </p>
 
             {selectedSubcats.length === 0 ? (
-              <div className="mt-4 rounded-xl border border-dashed border-[#1B2A4A]/20 p-4 text-sm text-[#1B2A4A]/75">
-                <p>No subcategories yet for {selectedCategory}.</p>
-                <p className="mt-1">Be the first to add one →</p>
+              <div className="mt-4 rounded-xl border-2 border-dashed border-[#E4E8F0] bg-[#F9FAFC] p-6 text-center">
+                <p className="text-sm font-semibold text-[#1B2A4A]">No subcategories yet for {selectedCategory}.</p>
+                <p className="mt-1 text-[10px] text-[#9AA5B4]">Be the first to add one</p>
               </div>
             ) : (
               <ul className="mt-4 space-y-2">
                 {defaultSubcats.map((subcatName) => (
-                  <li key={`default-${selectedCategory}-${subcatName}`} className="flex items-center justify-between rounded-xl bg-[#F4F6FA] p-3">
+                  <li
+                    key={`default-${selectedCategory}-${subcatName}`}
+                    className="flex items-center justify-between rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] p-3"
+                  >
                     <div>
-                      <p className="text-sm font-medium text-[#1B2A4A]/75">{subcatName}</p>
-                      <p className="text-xs text-[#1B2A4A]/55">Default category set</p>
+                      <p className="text-sm font-semibold text-[#1B2A4A]">{subcatName}</p>
+                      <p className="text-[10px] text-[#9AA5B4]">Default category set</p>
                     </div>
-                    <span className="text-xs font-semibold text-[#1B2A4A]/50">Built-in</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#9AA5B4]">Built-in</span>
                   </li>
                 ))}
                 {customSubcatsForSelected.map((subcat) => {
                   const canManage = subcat.createdBy === user.uid || role === "admin";
                   return (
-                    <li key={subcat.id} className="flex items-center justify-between rounded-xl bg-[#F9FAFC] p-3">
+                    <li
+                      key={subcat.id}
+                      className="flex items-center justify-between rounded-xl border border-[#E4E8F0] bg-[#F9FAFC] p-3"
+                    >
                       <div>
                         {editingSubcatId === subcat.id ? (
                           <div className="flex items-center gap-2">
-                            <input value={editingSubcatName} onChange={(e) => setEditingSubcatName(e.target.value)} className="h-8 rounded-lg border border-[#1B2A4A]/15 bg-white px-2 text-sm" />
-                            <button type="button" onClick={() => void handleRenameSubcategory()} className="text-xs font-semibold text-[#1B2A4A] underline underline-offset-2">Save</button>
-                            <button type="button" onClick={() => { setEditingSubcatId(""); setEditingSubcatName(""); }} className="text-xs font-semibold text-[#1B2A4A]/70 underline underline-offset-2">Cancel</button>
+                            <input
+                              value={editingSubcatName}
+                              onChange={(e) => setEditingSubcatName(e.target.value)}
+                              className="h-9 w-full rounded-xl border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => void handleRenameSubcategory()}
+                              className="rounded-xl bg-[#C9A84C] px-3 py-1.5 text-xs font-bold text-[#1B2A4A]"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setEditingSubcatId(""); setEditingSubcatName(""); }}
+                              className="rounded-xl border border-[#E4E8F0] px-3 py-1.5 text-xs font-semibold text-[#9AA5B4]"
+                            >
+                              Cancel
+                            </button>
                           </div>
                         ) : (
-                          <p className="text-sm font-medium">{subcat.name}</p>
+                          <p className="text-sm font-semibold text-[#1B2A4A]">{subcat.name}</p>
                         )}
-                        <p className="text-xs text-[#1B2A4A]/65">Created by {subcat.createdByName}</p>
+                        <p className="text-[10px] text-[#9AA5B4]">Created by {subcat.createdByName}</p>
                       </div>
-                      {canManage ? (
-                        <div className="flex items-center gap-3">
-                          <button type="button" onClick={() => { setEditingSubcatId(subcat.id); setEditingSubcatName(subcat.name); }} className="text-xs font-semibold text-[#1B2A4A] underline underline-offset-2">Edit</button>
-                          <button type="button" onClick={() => void handleDeleteSubcategory(subcat.id)} className="text-xs font-semibold text-red-600 underline underline-offset-2">Delete</button>
+                      {canManage && editingSubcatId !== subcat.id ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { setEditingSubcatId(subcat.id); setEditingSubcatName(subcat.name); }}
+                            className="rounded-xl border border-[#E4E8F0] bg-white px-3 py-1.5 text-xs font-semibold text-[#1B2A4A] hover:bg-[#F4F6FA]"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteSubcategory(subcat.id)}
+                            className="rounded-xl border border-red-100 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                          >
+                            Delete
+                          </button>
                         </div>
                       ) : null}
                     </li>
@@ -187,15 +234,36 @@ export default function SettingsCategoriesPage() {
 
             <div className="mt-4">
               {!showAddForm ? (
-                <button type="button" onClick={() => setShowAddForm(true)} className="inline-flex h-10 items-center justify-center rounded-lg border border-[#C9A84C] px-3 text-sm font-semibold text-[#1B2A4A] transition hover:bg-[#FFF8E8]">
-                  ➕ Add subcategory
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(true)}
+                  className="rounded-xl border border-[#C9A84C] bg-white px-4 py-2.5 text-sm font-bold text-[#1B2A4A] hover:bg-[#FFF8E8]"
+                >
+                  + Add subcategory
                 </button>
               ) : (
-                <div className="flex flex-col gap-2 rounded-xl bg-[#FFF8E8] p-3 transition-all">
-                  <input value={newSubcatName} onChange={(e) => setNewSubcatName(e.target.value)} placeholder={`Add a ${selectedCategory} subcategory`} className="h-10 rounded-lg border border-[#1B2A4A]/15 bg-white px-3 text-sm" />
+                <div className="flex flex-col gap-3 rounded-xl border border-[#C9A84C] bg-[#FFF8E8] p-4">
+                  <input
+                    value={newSubcatName}
+                    onChange={(e) => setNewSubcatName(e.target.value)}
+                    placeholder={`Add a ${selectedCategory} subcategory`}
+                    className="h-10 rounded-xl border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none"
+                  />
                   <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => void handleAddSubcategory()} className="inline-flex h-10 items-center justify-center rounded-lg bg-[#C9A84C] px-3 text-sm font-semibold text-[#1B2A4A]">Save</button>
-                    <button type="button" onClick={() => { setShowAddForm(false); setNewSubcatName(""); }} className="inline-flex h-10 items-center justify-center rounded-lg border border-[#1B2A4A]/20 px-3 text-sm">Cancel</button>
+                    <button
+                      type="button"
+                      onClick={() => void handleAddSubcategory()}
+                      className="rounded-xl bg-[#C9A84C] px-4 py-2.5 text-sm font-bold text-[#1B2A4A] disabled:opacity-50"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowAddForm(false); setNewSubcatName(""); }}
+                      className="rounded-xl border border-[#E4E8F0] px-4 py-2.5 text-sm font-semibold text-[#9AA5B4] hover:bg-[#F4F6FA]"
+                    >
+                      Cancel
+                    </button>
                   </div>
                 </div>
               )}
@@ -203,7 +271,9 @@ export default function SettingsCategoriesPage() {
           </div>
         </section>
 
-        <p className="text-xs text-[#1B2A4A]/55">Real-time sync active for {subcategories.length} household subcategories.</p>
+        <p className="text-[10px] text-[#9AA5B4]">
+          Real-time sync active for {subcategories.length} household subcategories.
+        </p>
       </div>
     </div>
   );

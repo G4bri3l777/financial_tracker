@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   addDoc, collection, doc, getDoc,
   serverTimestamp, updateDoc, deleteDoc,
 } from "firebase/firestore";
 import { useAuth } from "@/app/hooks/useAuth";
-import OnboardingProgressDots from "@/app/components/OnboardingProgressDots";
 import { useLoans, LOAN_TYPE_LABELS, LOAN_TYPE_COLORS, type Loan, type LoanDraft } from "@/app/hooks/useLoans";
 import { useMembers } from "@/app/hooks/useMembers";
 import { db } from "@/app/lib/firebase";
@@ -15,13 +15,12 @@ import { db } from "@/app/lib/firebase";
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 
-export default function OnboardingLoansPage() {
+export default function SettingsLoansPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const [householdId, setHouseholdId] = useState("");
   const [userRole, setUserRole] = useState("");
   const [loadingCtx, setLoadingCtx] = useState(true);
-  const [continuing, setContinuing] = useState(false);
   const [hasDebt, setHasDebt] = useState<"yes" | "no" | "">("");
 
   const isAdmin = userRole === "admin";
@@ -92,17 +91,6 @@ export default function OnboardingLoansPage() {
     await deleteDoc(doc(db, "households", householdId, "loans", id));
   }
 
-  async function finish() {
-    if (!user) return;
-    setContinuing(true);
-    try {
-      await updateDoc(doc(db, "users", user.uid), { onboardingStep: "complete" });
-      router.push("/dashboard");
-    } finally {
-      setContinuing(false);
-    }
-  }
-
   if (authLoading || loadingCtx) return (
     <div className="flex h-screen items-center justify-center bg-[#F4F6FA]">
       <p className="text-sm text-[#1B2A4A]/40">Loading...</p>
@@ -114,19 +102,22 @@ export default function OnboardingLoansPage() {
   const totalDebt  = loans.reduce((s, l) => s + l.balance, 0);
 
   return (
-    <div className="min-h-screen bg-[#F4F6FA] text-[#1B2A4A]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#F4F6FA] text-[#1B2A4A]">
       {/* Header */}
-      <div className="border-b border-[#E4E8F0] bg-white px-6 py-5">
-        <div className="mx-auto max-w-2xl">
-          <OnboardingProgressDots currentStep="Loans" userRole={userRole} />
-          <h1 className="text-2xl font-bold text-[#1B2A4A]">Loans & Debt</h1>
-          <p className="mt-1 text-sm text-[#9AA5B4]">
-            Track what you owe. We&apos;ll use this for your financial overview.
-          </p>
+      <div className="shrink-0 border-b border-[#E4E8F0] bg-white px-6 py-4">
+        <div className="mx-auto flex max-w-2xl items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/settings" className="text-xs text-[#9AA5B4] hover:text-[#1B2A4A]">← Settings</Link>
+            <span className="text-[#E4E8F0]">/</span>
+            <h1 className="text-xl font-bold text-[#1B2A4A]">Loans & Debt</h1>
+          </div>
         </div>
+        <p className="mx-auto mt-1 max-w-2xl text-xs text-[#9AA5B4]">
+          Track what you owe. We&apos;ll use this for your financial overview.
+        </p>
       </div>
 
-      <div className="mx-auto max-w-2xl space-y-5 px-6 py-8">
+      <div className="mx-auto max-w-2xl flex-1 space-y-5 px-6 py-6">
 
         {/* Do you have debt? */}
         {hasDebt === "" && loans.length === 0 && (
@@ -146,13 +137,12 @@ export default function OnboardingLoansPage() {
               >
                 Yes, I have debt
               </button>
-              <button
-                type="button"
-                onClick={() => void finish()}
+              <Link
+                href="/dashboard"
                 className="rounded-xl border border-[#E4E8F0] bg-white px-6 py-3 text-sm font-semibold text-[#9AA5B4]"
               >
                 No debt — go to dashboard
-              </button>
+              </Link>
             </div>
           </div>
         )}
@@ -487,25 +477,6 @@ export default function OnboardingLoansPage() {
             )}
           </>
         )}
-
-        {/* Continue / Skip */}
-        <div className="flex items-center justify-between pt-2">
-          <button
-            type="button"
-            onClick={() => void finish()}
-            className="text-sm font-semibold text-[#9AA5B4] underline hover:text-[#1B2A4A]"
-          >
-            Skip for now →
-          </button>
-          <button
-            type="button"
-            disabled={continuing}
-            onClick={() => void finish()}
-            className="rounded-xl bg-[#C9A84C] px-6 py-3 text-sm font-bold text-[#1B2A4A] disabled:opacity-50"
-          >
-            {continuing ? "..." : "Go to Dashboard →"}
-          </button>
-        </div>
       </div>
     </div>
   );

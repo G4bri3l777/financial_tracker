@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import OnboardingProgressDots from "@/app/components/OnboardingProgressDots";
 import {
   Timestamp,
   doc,
@@ -200,8 +201,8 @@ export default function OnboardingInvitePage() {
 
   if (authLoading || loadingInvite || !guardChecked) {
     return (
-      <div className="min-h-screen bg-white px-4 py-8 text-[#1B2A4A] md:px-6 lg:px-8">
-        <div className="mx-auto w-full max-w-lg">Loading...</div>
+      <div className="flex min-h-screen items-center justify-center bg-[#F4F6FA]">
+        <p className="text-sm text-[#1B2A4A]/40">Loading...</p>
       </div>
     );
   }
@@ -211,29 +212,31 @@ export default function OnboardingInvitePage() {
   }
 
   return (
-    <div className="min-h-screen bg-white px-4 py-8 text-[#1B2A4A] md:bg-[#F4F6FA] md:px-6 lg:px-8">
-      <div className="mx-auto w-full max-w-lg">
-        <main className="space-y-6 md:rounded-2xl md:bg-white md:p-8 md:shadow-xl">
-          <section className="space-y-3">
-            <div className="flex items-center justify-between text-sm font-medium">
-              <span>Step 3 of 3</span>
-              <span className="text-[#1B2A4A]/70">Invite</span>
-            </div>
-            <div className="h-2 w-full rounded-full bg-[#F4F6FA]">
-              <div className="h-2 w-full rounded-full bg-[#C9A84C]" />
-            </div>
-          </section>
+    <div className="min-h-screen bg-[#F4F6FA] text-[#1B2A4A]">
+      {/* Header */}
+      <div className="border-b border-[#E4E8F0] bg-white px-6 py-5">
+        <div className="mx-auto max-w-2xl">
+          <OnboardingProgressDots currentStep="Invite" userRole="admin" />
+          <h1 className="text-2xl font-bold text-[#1B2A4A]">Invite your spouse</h1>
+          <p className="mt-1 text-sm text-[#9AA5B4]">
+            Kingdom Wealth works best when you both join
+          </p>
+        </div>
+      </div>
 
-          <section className="space-y-2">
-            <h1 className="text-3xl font-bold md:text-4xl">Invite your spouse</h1>
-            <p className="text-sm text-[#1B2A4A]/75 md:text-base">
-              Kingdom Wealth works best when you both join
-            </p>
-          </section>
+      <div className="mx-auto max-w-2xl space-y-5 px-6 py-8">
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {error}
+          </div>
+        )}
 
-          <section className="space-y-2">
-            <p className="text-sm font-medium">Invite link</p>
-            <div className="flex items-center gap-2 rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] p-2">
+        <section className="rounded-2xl border border-[#E4E8F0] bg-white p-6 space-y-4">
+          <div>
+            <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">
+              Invite link
+            </label>
+            <div className="flex items-center gap-2 rounded-xl border border-[#E4E8F0] bg-white p-2">
               <input
                 type="text"
                 value={inviteLink}
@@ -243,56 +246,50 @@ export default function OnboardingInvitePage() {
               <button
                 type="button"
                 onClick={copyInviteLink}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[#1B2A4A]/15 bg-white text-[#1B2A4A]"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#E4E8F0] bg-[#F4F6FA] text-[#1B2A4A] hover:bg-[#E4E8F0] transition"
                 aria-label="Copy invite link"
               >
                 ⧉
               </button>
             </div>
-            {copied ? <p className="text-sm font-medium text-green-700">Copied!</p> : null}
-          </section>
-
-          {error ? <p className="text-sm font-medium text-red-600">{error}</p> : null}
+            {copied ? <p className="mt-1 text-sm font-medium text-green-700">Copied!</p> : null}
+          </div>
 
           <button
             type="button"
             onClick={handleShare}
             disabled={sharing || finishing || !inviteLink}
-            className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#C9A84C] px-5 text-base font-semibold text-[#1B2A4A] transition hover:brightness-95"
+            className="w-full rounded-xl bg-[#C9A84C] py-2.5 text-sm font-bold text-[#1B2A4A] disabled:opacity-50"
           >
             {sharing ? "Sharing..." : "Share Invite Link"}
           </button>
 
-          <form onSubmit={finishOnboarding} className="space-y-4">
+          <form onSubmit={finishOnboarding}>
             <button
               type="submit"
               disabled={finishing}
-              className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-[#C9A84C] bg-white px-5 text-base font-semibold text-[#1B2A4A] transition hover:bg-[#F4F6FA]"
+              className="w-full rounded-xl border border-[#C9A84C] bg-white py-2.5 text-sm font-bold text-[#1B2A4A] transition hover:bg-[#F9FAFC] disabled:opacity-50"
             >
               {finishing ? "Saving..." : "Continue to Accounts →"}
             </button>
           </form>
 
-          <div className="space-y-4">
-            <button
-              type="button"
-              onClick={handleSkip}
-              disabled={finishing}
-              className="text-sm font-medium text-[#1B2A4A]/55 underline underline-offset-2"
-            >
-              Skip for now →
-            </button>
+          <button
+            type="button"
+            onClick={handleSkip}
+            disabled={finishing}
+            className="block w-full text-sm font-medium text-[#9AA5B4] hover:text-[#1B2A4A]"
+          >
+            Skip for now →
+          </button>
+        </section>
 
-            <div>
-              <Link
-                href="/onboarding/household"
-                className="text-sm font-semibold text-[#1B2A4A]/80 underline underline-offset-2"
-              >
-                ← Back
-              </Link>
-            </div>
-          </div>
-        </main>
+        <Link
+          href="/onboarding/household"
+          className="block text-sm font-semibold text-[#9AA5B4] hover:text-[#1B2A4A]"
+        >
+          ← Back
+        </Link>
       </div>
     </div>
   );

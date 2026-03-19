@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useAuth } from "../../hooks/useAuth";
 import { db } from "../../lib/firebase";
+import OnboardingProgressDots from "@/app/components/OnboardingProgressDots";
 
 type HousingValue = "own" | "rent";
 type DebtValue = "yes" | "no";
@@ -21,6 +22,7 @@ export default function OnboardingProfilePage() {
   const [hasDebt, setHasDebt] = useState<DebtValue>("no");
   const [fetchingProfile, setFetchingProfile] = useState(false);
   const [guardChecked, setGuardChecked] = useState(false);
+  const [userRole, setUserRole] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -150,8 +152,8 @@ export default function OnboardingProfilePage() {
 
   if (authLoading || !guardChecked) {
     return (
-      <div className="min-h-screen bg-white px-4 py-8 text-[#1B2A4A] md:px-6 lg:px-8">
-        <div className="mx-auto w-full max-w-lg">Loading...</div>
+      <div className="flex min-h-screen items-center justify-center bg-[#F4F6FA]">
+        <p className="text-sm text-[#1B2A4A]/40">Loading...</p>
       </div>
     );
   }
@@ -161,98 +163,97 @@ export default function OnboardingProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-white px-4 py-8 text-[#1B2A4A] md:bg-[#F4F6FA] md:px-6 lg:px-8">
-      <div className="mx-auto w-full max-w-lg">
-        <main className="space-y-6 md:rounded-2xl md:bg-white md:p-8 md:shadow-xl">
-          <section className="space-y-3">
-            <div className="flex items-center justify-between text-sm font-medium">
-              <span>Step 1 of 3</span>
-              <span className="text-[#1B2A4A]/70">Profile</span>
-            </div>
-            <div className="h-2 w-full rounded-full bg-[#F4F6FA]">
-              <div className="h-2 w-1/3 rounded-full bg-[#C9A84C]" />
-            </div>
-          </section>
+    <div className="min-h-screen bg-[#F4F6FA] text-[#1B2A4A]">
+      {/* Header */}
+      <div className="border-b border-[#E4E8F0] bg-white px-6 py-5">
+        <div className="mx-auto max-w-2xl">
+          <OnboardingProgressDots currentStep="Profile" userRole={userRole} />
+          <h1 className="text-2xl font-bold text-[#1B2A4A]">Tell us about yourself</h1>
+          <p className="mt-1 text-sm text-[#9AA5B4]">
+            This helps us personalize your financial analysis
+          </p>
+        </div>
+      </div>
 
-          <section className="space-y-2">
-            <h1 className="text-3xl font-bold md:text-4xl">Tell us about yourself</h1>
-            <p className="text-sm text-[#1B2A4A]/75 md:text-base">
-              This helps us personalize your financial analysis
-            </p>
-          </section>
+      <div className="mx-auto max-w-2xl space-y-5 px-6 py-8">
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {error}
+          </div>
+        )}
 
+        <section className="rounded-2xl border border-[#E4E8F0] bg-white p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium">First name</span>
-              <input
-                type="text"
-                name="firstName"
-                value={firstName}
-                onChange={(event) => setFirstName(event.target.value)}
-                disabled={fetchingProfile || saving}
-                required
-                className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] px-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
-              />
-            </label>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">First name</label>
+                <input
+                  type="text"
+                  name="firstName"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  disabled={fetchingProfile || saving}
+                  required
+                  className="h-10 w-full rounded-xl border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">Last name</label>
+                <input
+                  type="text"
+                  name="lastName"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  disabled={fetchingProfile || saving}
+                  required
+                  className="h-10 w-full rounded-xl border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none"
+                />
+              </div>
+            </div>
 
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium">Last name</span>
-              <input
-                type="text"
-                name="lastName"
-                value={lastName}
-                onChange={(event) => setLastName(event.target.value)}
-                disabled={fetchingProfile || saving}
-                required
-                className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] px-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
-              />
-            </label>
-
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium">Date of birth</span>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">Date of birth</label>
               <input
                 type="date"
                 name="dateOfBirth"
                 value={dateOfBirth}
-                onChange={(event) => setDateOfBirth(event.target.value)}
+                onChange={(e) => setDateOfBirth(e.target.value)}
                 disabled={fetchingProfile || saving}
                 required
-                className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] px-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
+                className="h-10 w-full rounded-xl border border-[#E4E8F0] bg-white px-3 text-sm focus:border-[#C9A84C] focus:outline-none"
               />
-            </label>
+            </div>
 
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium">Monthly take-home income</span>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">Monthly take-home income</label>
               <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#1B2A4A]/60">
-                  $
-                </span>
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[#9AA5B4]">$</span>
                 <input
                   type="number"
                   name="monthlyIncome"
                   inputMode="numeric"
-                  min="0"
-                  step="1"
+                  min={0}
+                  step={1}
                   value={monthlyIncome}
-                  onChange={(event) => setMonthlyIncome(event.target.value)}
+                  onChange={(e) => setMonthlyIncome(e.target.value)}
                   disabled={fetchingProfile || saving}
                   required
-                  className="h-12 w-full rounded-xl border border-[#1B2A4A]/15 bg-[#F4F6FA] pl-8 pr-3 text-sm outline-none ring-[#C9A84C] transition focus:ring-2"
+                  className="h-10 w-full rounded-xl border border-[#E4E8F0] bg-white pl-6 pr-3 text-sm focus:border-[#C9A84C] focus:outline-none"
                 />
               </div>
-            </label>
+            </div>
 
-            <div className="space-y-1.5">
-              <span className="text-sm font-medium">Own or Rent?</span>
+            <div>
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">Own or Rent?</label>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setOwnsOrRents("own")}
                   disabled={fetchingProfile || saving}
-                  className={`h-11 flex-1 rounded-full border px-4 text-sm font-semibold transition ${
+                  className={`h-10 flex-1 rounded-xl border px-4 text-sm font-semibold transition ${
                     ownsOrRents === "own"
                       ? "border-[#C9A84C] bg-[#C9A84C] text-[#1B2A4A]"
-                      : "border-[#1B2A4A]/15 bg-white text-[#1B2A4A]"
+                      : "border-[#E4E8F0] bg-white text-[#1B2A4A] hover:bg-[#F9FAFC]"
                   }`}
                 >
                   I Own
@@ -261,10 +262,10 @@ export default function OnboardingProfilePage() {
                   type="button"
                   onClick={() => setOwnsOrRents("rent")}
                   disabled={fetchingProfile || saving}
-                  className={`h-11 flex-1 rounded-full border px-4 text-sm font-semibold transition ${
+                  className={`h-10 flex-1 rounded-xl border px-4 text-sm font-semibold transition ${
                     ownsOrRents === "rent"
                       ? "border-[#C9A84C] bg-[#C9A84C] text-[#1B2A4A]"
-                      : "border-[#1B2A4A]/15 bg-white text-[#1B2A4A]"
+                      : "border-[#E4E8F0] bg-white text-[#1B2A4A] hover:bg-[#F9FAFC]"
                   }`}
                 >
                   I Rent
@@ -272,17 +273,17 @@ export default function OnboardingProfilePage() {
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <span className="text-sm font-medium">Any existing debt?</span>
+            <div>
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-[#9AA5B4]">Any existing debt?</label>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setHasDebt("yes")}
                   disabled={fetchingProfile || saving}
-                  className={`h-11 flex-1 rounded-full border px-4 text-sm font-semibold transition ${
+                  className={`h-10 flex-1 rounded-xl border px-4 text-sm font-semibold transition ${
                     hasDebt === "yes"
                       ? "border-[#C9A84C] bg-[#C9A84C] text-[#1B2A4A]"
-                      : "border-[#1B2A4A]/15 bg-white text-[#1B2A4A]"
+                      : "border-[#E4E8F0] bg-white text-[#1B2A4A] hover:bg-[#F9FAFC]"
                   }`}
                 >
                   Yes
@@ -291,10 +292,10 @@ export default function OnboardingProfilePage() {
                   type="button"
                   onClick={() => setHasDebt("no")}
                   disabled={fetchingProfile || saving}
-                  className={`h-11 flex-1 rounded-full border px-4 text-sm font-semibold transition ${
+                  className={`h-10 flex-1 rounded-xl border px-4 text-sm font-semibold transition ${
                     hasDebt === "no"
                       ? "border-[#C9A84C] bg-[#C9A84C] text-[#1B2A4A]"
-                      : "border-[#1B2A4A]/15 bg-white text-[#1B2A4A]"
+                      : "border-[#E4E8F0] bg-white text-[#1B2A4A] hover:bg-[#F9FAFC]"
                   }`}
                 >
                   No
@@ -302,21 +303,19 @@ export default function OnboardingProfilePage() {
               </div>
             </div>
 
-            {fetchingProfile ? (
-              <p className="text-sm text-[#1B2A4A]/70">Loading saved profile...</p>
-            ) : null}
-
-            {error ? <p className="text-sm font-medium text-red-600">{error}</p> : null}
+            {fetchingProfile && (
+              <p className="text-sm text-[#9AA5B4]">Loading saved profile...</p>
+            )}
 
             <button
               type="submit"
               disabled={saving || fetchingProfile}
-              className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#C9A84C] px-5 text-base font-semibold text-[#1B2A4A] transition hover:brightness-95"
+              className="w-full rounded-xl bg-[#C9A84C] py-2.5 text-sm font-bold text-[#1B2A4A] disabled:opacity-50"
             >
               {saving ? "Saving..." : "Continue"}
             </button>
           </form>
-        </main>
+        </section>
       </div>
     </div>
   );
