@@ -195,8 +195,8 @@ export default function OnboardingAccountsPage() {
     if (!user) return;
     setContinuing(true);
     try {
-      await updateDoc(doc(db, "users", user.uid), { onboardingStep: "review" });
-      router.push("/onboarding/review");
+      await updateDoc(doc(db, "users", user.uid), { onboardingStep: "loans" });
+      router.push("/onboarding/loans");
     } finally {
       setContinuing(false);
     }
@@ -1381,12 +1381,12 @@ export default function OnboardingAccountsPage() {
             type="button"
             onClick={async () => {
               if (!user) return;
-              await updateDoc(doc(db, "users", user.uid), { onboardingStep: "review" });
-              router.push("/onboarding/review");
+              await updateDoc(doc(db, "users", user.uid), { onboardingStep: "invite" });
+              router.push("/onboarding/invite");
             }}
-            className="text-sm font-semibold text-[#9AA5B4] underline hover:text-[#1B2A4A]"
+            className="text-sm font-semibold text-[#9AA5B4]  hover:text-[#1B2A4A]"
           >
-            Skip for now →
+           ← Back 
           </button>
           <button
             type="button"
@@ -1394,7 +1394,7 @@ export default function OnboardingAccountsPage() {
             onClick={() => void continueToReview()}
             className="rounded-xl bg-[#1B2A4A] px-6 py-3 text-sm font-bold text-white disabled:opacity-50"
           >
-            {continuing ? "..." : "Continue to Review →"}
+            {continuing ? "..." : "Continue →"}
           </button>
         </div>
       </div>

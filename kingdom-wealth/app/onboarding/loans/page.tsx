@@ -96,8 +96,19 @@ export default function OnboardingLoansPage() {
     if (!user) return;
     setContinuing(true);
     try {
-      await updateDoc(doc(db, "users", user.uid), { onboardingStep: "complete" });
-      router.push("/dashboard");
+      await updateDoc(doc(db, "users", user.uid), { onboardingStep: "review" });
+      router.push("/onboarding/review");
+    } finally {
+      setContinuing(false);
+    }
+  }
+
+  async function backToAccounts() {
+    if (!user) return;
+    setContinuing(true);
+    try {
+      await updateDoc(doc(db, "users", user.uid), { onboardingStep: "accounts" });
+      router.push("/onboarding/accounts");
     } finally {
       setContinuing(false);
     }
@@ -151,7 +162,7 @@ export default function OnboardingLoansPage() {
                 onClick={() => void finish()}
                 className="rounded-xl border border-[#E4E8F0] bg-white px-6 py-3 text-sm font-semibold text-[#9AA5B4]"
               >
-                No debt — go to dashboard
+                No debt — go to review
               </button>
             </div>
           </div>
@@ -492,10 +503,10 @@ export default function OnboardingLoansPage() {
         <div className="flex items-center justify-between pt-2">
           <button
             type="button"
-            onClick={() => void finish()}
-            className="text-sm font-semibold text-[#9AA5B4] underline hover:text-[#1B2A4A]"
+            onClick={() => void backToAccounts()}
+            className="text-sm font-semibold text-[#9AA5B4] hover:text-[#1B2A4A]"
           >
-            Skip for now →
+            ← Back
           </button>
           <button
             type="button"
@@ -503,7 +514,7 @@ export default function OnboardingLoansPage() {
             onClick={() => void finish()}
             className="rounded-xl bg-[#C9A84C] px-6 py-3 text-sm font-bold text-[#1B2A4A] disabled:opacity-50"
           >
-            {continuing ? "..." : "Go to Dashboard →"}
+            {continuing ? "..." : "Go to Review →"}
           </button>
         </div>
       </div>

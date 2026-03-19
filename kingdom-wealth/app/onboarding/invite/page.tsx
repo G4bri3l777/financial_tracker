@@ -273,7 +273,7 @@ export default function OnboardingInvitePage() {
               {finishing ? "Saving..." : "Continue to Accounts →"}
             </button>
           </form>
-
+{/* 
           <button
             type="button"
             onClick={handleSkip}
@@ -281,7 +281,7 @@ export default function OnboardingInvitePage() {
             className="block w-full text-sm font-medium text-[#9AA5B4] hover:text-[#1B2A4A]"
           >
             Skip for now →
-          </button>
+          </button> */}
         </section>
 
         <Link

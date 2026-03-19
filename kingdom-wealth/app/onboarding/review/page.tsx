@@ -1653,15 +1653,15 @@ export default function OnboardingReviewPage() {
     }
   };
 
-  const continueToLoans = async () => {
+  const continueToDashboard = async () => {
     if (!user) return;
     try {
       setContinuing(true);
       await updateDoc(doc(db, "users", user.uid), {
-        onboardingStep: "loans",
+        onboardingStep: "complete",
       });
-      router.push("/onboarding/loans");
-    } catch (e) {
+      router.push("/dashboard");
+    } catch (e) { 
       const msg = e instanceof Error ? e.message : "Could not continue.";
       setError(msg);
     } finally {
@@ -2088,6 +2088,7 @@ export default function OnboardingReviewPage() {
           </button>
         </div>
 
+        {/* Action buttons — desktop only (Mark All + Add) */}
         <div className="hidden md:flex items-center gap-2">
           <button
             type="button"
@@ -2104,15 +2105,11 @@ export default function OnboardingReviewPage() {
           >
             + Add
           </button>
-          <button
-            type="button"
-            onClick={() => void continueToLoans()}
-            disabled={continuing}
-            className="inline-flex h-10 items-center justify-center rounded-lg bg-[#1B2A4A] px-4 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            {continuing ? "..." : "Continue →"}
-          </button>
-          <button
+        </div>
+
+        {/* Navigation buttons — always visible on all screen sizes */}
+        <div className="flex items-center gap-2">
+        <button
             type="button"
             onClick={async () => {
               if (!user) return;
@@ -2121,8 +2118,17 @@ export default function OnboardingReviewPage() {
             }}
             className="text-xs font-semibold text-[#9AA5B4] underline hover:text-[#1B2A4A]"
           >
-            Skip for now →
+            ← Back
           </button>
+          <button
+            type="button"
+            onClick={() => void continueToDashboard()}
+            disabled={continuing}
+            className="rounded-lg bg-[#1B2A4A] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 sm:px-4 sm:py-2 sm:text-sm"
+          >
+            {continuing ? "..." : "Continue →"}
+          </button>
+
         </div>
         </div>
       </header>
