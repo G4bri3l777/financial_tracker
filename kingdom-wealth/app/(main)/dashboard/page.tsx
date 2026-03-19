@@ -18,6 +18,7 @@ import { useLoans, LOAN_TYPE_LABELS, LOAN_TYPE_COLORS, type Loan, type LoanDraft
 import { useMembers } from "@/app/hooks/useMembers";
 import { useDocuments } from "@/app/hooks/useDocuments";
 import { useSubcategories } from "@/app/hooks/useSubcategories";
+import { useBudget } from "@/app/hooks/useBudget";
 import { CATEGORIES, getCategoryEmoji, getCategoryColor } from "@/app/lib/categories";
 import { db } from "@/app/lib/firebase";
 
@@ -140,6 +141,11 @@ function cardsFormatDate(str: string): string {
     });
   } catch { return str; }
 }
+function monthLabel(ym: string): string {
+  const [y, m] = ym.split("-");
+  return new Date(Number(y), Number(m) - 1, 1)
+    .toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
 
 // ── Main Component ────────────────────────────────────────────────
 export default function DashboardPage() {
@@ -167,6 +173,7 @@ export default function DashboardPage() {
   const [savingDueDate, setSavingDueDate]   = useState<Record<string, boolean>>({});
 
   const { accounts } = useAccounts(householdId || undefined);
+  const { budget } = useBudget(householdId || undefined);
   const { studentBalance: debtAnswersStudentBalance, hasStudentLoans } = useDebtAnswers(user?.uid);
   const members      = useMembers(householdId || undefined);
   const documents    = useDocuments(householdId || undefined);
@@ -1014,6 +1021,31 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
+
+        {/* Budget approval banner */}
+        {budget && budget.status === "pending_approval" &&
+          !budget.approvedBy?.includes(user?.uid ?? "") && (
+          <div className="mb-4 flex items-center justify-between rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3">
+            <div className="flex items-center gap-3">
+              <span className="text-xl">💰</span>
+              <div>
+                <p className="text-sm font-bold text-amber-800">
+                  Budget approval needed
+                </p>
+                <p className="text-xs text-amber-600">
+                  {members.find(m => m.uid === budget.proposedBy)?.firstName ?? "Your partner"} proposed the{" "}
+                  {monthLabel(budget.month)} budget — review and approve it.
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/budget"
+              className="rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-white hover:bg-amber-600"
+            >
+              Review Budget →
+            </Link>
+          </div>
+        )}
 
         {/* ── KPI STRIP ─────────────────────────────────────────── */}
         <div className="shrink-0 border-b border-[#E8ECF0] bg-white px-6 py-5">
