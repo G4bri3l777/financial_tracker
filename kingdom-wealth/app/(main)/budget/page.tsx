@@ -547,11 +547,11 @@ export default function BudgetPage() {
       <div className="shrink-0 border-b border-[#E4E8F0] bg-white px-6 py-4">
         <div className="mx-auto flex max-w-4xl items-center justify-between">
           <div>
-            <div className="flex items-center gap-2 text-xs text-[#9AA5B4]">
+            {/* <div className="flex items-center gap-2 text-xs text-[#9AA5B4]">
               <Link href="/dashboard" className="hover:text-[#1B2A4A]">Dashboard</Link>
               <span>/</span>
               <span className="font-semibold text-[#1B2A4A]">Budget</span>
-            </div>
+            </div> */}
 
             {/* Month navigator */}
             <div className="mt-1.5 flex items-center gap-3">

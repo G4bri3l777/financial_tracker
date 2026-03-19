@@ -1632,7 +1632,10 @@ export default function DashboardPage() {
               <button
                 key={tab}
                 type="button"
-                onClick={() => setActiveTab(tab)}
+                onClick={() => {
+                  if (tab === "transactions") { router.push("/transactions"); return; }
+                  setActiveTab(tab);
+                }}
                 className={`border-b-2 pb-3 pt-3 text-sm font-semibold transition ${
                   activeTab === tab
                     ? "border-[#C9A84C] text-[#1B2A4A]"
