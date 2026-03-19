@@ -742,6 +742,7 @@ export default function OnboardingReviewPage() {
     Record<string, { name: string; parentCategory: string }>
   >({});
   const [focusMode, setFocusMode] = useState<"queue" | "all">("queue");
+  const [mobilePanel, setMobilePanel] = useState<"list" | "detail">("list");
 
   const documents = useDocuments(householdId || undefined);
   const { accounts, loading: _accountsLoading } = useAccounts(householdId || undefined);
@@ -1965,6 +1966,7 @@ export default function OnboardingReviewPage() {
         if (next) {
           setSelectedTxId(next.id);
           setShowDetailPanel(true);
+          setMobilePanel("detail");
         }
       }
       if (e.key === "ArrowUp" || e.key === "k") {
@@ -1973,6 +1975,7 @@ export default function OnboardingReviewPage() {
         if (prev) {
           setSelectedTxId(prev.id);
           setShowDetailPanel(true);
+          setMobilePanel("detail");
         }
       }
       if ((e.key === " " || e.key === "Enter") && selectedTxId) {
@@ -2002,6 +2005,7 @@ export default function OnboardingReviewPage() {
       if (e.key === "Escape") {
         setShowDetailPanel(false);
         setSelectedTxId("");
+        setMobilePanel("list");
       }
     };
     window.addEventListener("keydown", handler);
@@ -2057,7 +2061,7 @@ export default function OnboardingReviewPage() {
           />
         </div>
 
-        <div className="flex items-center gap-1 rounded-lg border border-[#E4E8F0] p-0.5">
+        <div className="hidden md:flex items-center gap-1 rounded-lg border border-[#E4E8F0] p-0.5">
           <button
             type="button"
             onClick={() => {
@@ -2084,7 +2088,7 @@ export default function OnboardingReviewPage() {
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="hidden md:flex items-center gap-2">
           <button
             type="button"
             onClick={() => void markAllAsReviewed()}
@@ -2123,7 +2127,7 @@ export default function OnboardingReviewPage() {
         </div>
       </header>
 
-      <div className="shrink-0 border-b border-[#E4E8F0] bg-[#FAFBFC] px-5 py-1.5">
+      <div className="hidden md:block shrink-0 border-b border-[#E4E8F0] bg-[#FAFBFC] px-5 py-1.5">
         <p className="text-[10px] text-[#9AA5B4]">
           <span className="font-semibold text-[#1B2A4A]/50">Space/Enter</span> approve &nbsp;·&nbsp;
           <span className="font-semibold text-[#1B2A4A]/50">↑↓</span> navigate &nbsp;·&nbsp;
@@ -2165,7 +2169,34 @@ export default function OnboardingReviewPage() {
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        <div className="flex w-[340px] shrink-0 flex-col border-r border-[#E4E8F0] bg-white">
+        <div className={`flex flex-col border-[#E4E8F0] bg-white ${
+          mobilePanel === "detail"
+            ? "hidden md:flex md:w-[340px] md:shrink-0 md:border-r"
+            : "flex w-full md:w-[340px] md:shrink-0 md:border-r"
+        }`}>
+          <div className="flex items-center gap-1 border-b border-[#E4E8F0] p-3 md:hidden">
+            <div className="flex flex-1 items-center gap-1 rounded-lg border border-[#E4E8F0] p-0.5">
+              <button
+                type="button"
+                onClick={() => { setFocusMode("queue"); setQuickFilter("all"); }}
+                className={`flex-1 rounded-md py-1.5 text-xs font-semibold transition ${
+                  focusMode === "queue" ? "bg-[#1B2A4A] text-white" : "text-[#1B2A4A]/60"
+                }`}
+              >
+                Queue {queueTransactions.length > 0 && `(${queueTransactions.length})`}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setFocusMode("all"); setQuickFilter("all"); }}
+                className={`flex-1 rounded-md py-1.5 text-xs font-semibold transition ${
+                  focusMode === "all" ? "bg-[#1B2A4A] text-white" : "text-[#1B2A4A]/60"
+                }`}
+              >
+                All ({transactions.length})
+              </button>
+            </div>
+          </div>
+
           <div className="shrink-0 space-y-2 border-b border-[#E4E8F0] p-3">
             <input
               value={search}
@@ -2250,6 +2281,7 @@ export default function OnboardingReviewPage() {
                     onClick={() => {
                       setSelectedTxId(tx.id);
                       setShowDetailPanel(true);
+                      setMobilePanel("detail");
                     }}
                     className={`w-full border-b border-[#F4F6FA] px-4 py-3 text-left transition ${
                       isSelected
@@ -2379,11 +2411,29 @@ export default function OnboardingReviewPage() {
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className={`flex flex-col overflow-hidden ${
+          mobilePanel === "detail"
+            ? "flex w-full flex-1"
+            : "hidden md:flex md:flex-1"
+        }`}>
+          {mobilePanel === "detail" && (
+            <div className="shrink-0 border-b border-[#E4E8F0] bg-white px-4 py-2 md:hidden">
+              <button
+                type="button"
+                onClick={() => { setSelectedTxId(""); setMobilePanel("list"); }}
+                className="flex items-center gap-1.5 text-sm font-semibold text-[#9AA5B4] hover:text-[#1B2A4A]"
+              >
+                ← Back to list
+              </button>
+            </div>
+          )}
           {!selectedTx ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
               <p className="text-4xl">👈</p>
-              <p className="text-base font-semibold text-[#1B2A4A]">Select a transaction</p>
+              <p className="text-base font-semibold text-[#1B2A4A]">
+                <span className="md:hidden">Tap a transaction to review it</span>
+                <span className="hidden md:inline">Select a transaction</span>
+              </p>
               <p className="text-sm text-[#9AA5B4]">or use ↑↓ arrow keys to navigate</p>
             </div>
           ) : (
